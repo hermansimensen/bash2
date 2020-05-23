@@ -539,7 +539,6 @@ public void OnClientPostAdminCheck(int client)
 {
 		if (CheckCommandAccess(client, "bash2_chat_log", ADMFLAG_RCON))
 		{
-			PrintToServer("hey");
 			g_bAdminMode[client] = true;
 		}
 }
