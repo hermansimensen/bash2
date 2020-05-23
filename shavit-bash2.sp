@@ -175,6 +175,7 @@ ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
 ConVar g_hAutoban;
+bool g_bAdminMode[MAXPLAYERS + 1];
 
 //shavit
 stylesettings_t g_aStyleSettings[STYLE_LIMIT];
@@ -196,6 +197,7 @@ public void OnPluginStart()
 	
 	g_Engine = GetEngineVersion();
 	RegAdminCmd("bash2_stats", Bash_Stats, ADMFLAG_RCON, "Check a player's strafe stats");
+	RegAdminCmd("bash2_admin", Bash_AdminMode, ADMFLAG_RCON, "Opt in/out of admin mode (Prints bash info into chat).");
 	
 	HookEvent("player_jump", Event_PlayerJump);
 	
@@ -275,7 +277,9 @@ stock void PrintToAdmins(const char[] msg, any...)
 	{
 		if (CheckCommandAccess(i, "bash2_chat_log", ADMFLAG_RCON))
 		{
-			PrintToChat(i, buffer);
+			if(g_bAdminMode[i]) {
+				PrintToChat(i, buffer);
+			}
 		}
 	}
 }
@@ -526,9 +530,18 @@ public Action Timer_UpdateYaw(Handle timer, any data)
 	{
 		if(IsClientInGame(iclient) && !IsFakeClient(iclient))
 		{
-			// QueryForCvars(iclient);
+			QueryForCvars(iclient);
 		}
 	}
+}
+
+public void OnClientPostAdminCheck(int client) 
+{
+		if (CheckCommandAccess(client, "bash2_chat_log", ADMFLAG_RCON))
+		{
+			PrintToServer("hey");
+			g_bAdminMode[client] = true;
+		}
 }
 
 public void OnClientPutInServer(int client)
@@ -623,242 +636,252 @@ public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, i
 
 void QueryForCvars(int client)
 {
-	if(g_Engine == Engine_CSS) QueryClientConVar(client, "cl_yawspeed", OnCvarRetrieved);
-	QueryClientConVar(client, "in_usekeyboardsampletime", OnCvarRetrieved);
-	QueryClientConVar(client, "m_yaw", OnCvarRetrieved);
-	QueryClientConVar(client, "m_filter", OnCvarRetrieved);
-	QueryClientConVar(client, "m_customaccel", OnCvarRetrieved);
-	QueryClientConVar(client, "m_customaccel_max", OnCvarRetrieved);
-	QueryClientConVar(client, "m_customaccel_scale", OnCvarRetrieved);
-	QueryClientConVar(client, "m_customaccel_exponent", OnCvarRetrieved);
-	QueryClientConVar(client, "m_rawinput", OnCvarRetrieved);
-	QueryClientConVar(client, "sensitivity", OnCvarRetrieved);
-	QueryClientConVar(client, "joy_yawsensitivity", OnCvarRetrieved);
-	QueryClientConVar(client, "joystick", OnCvarRetrieved);
-	if(g_Engine == Engine_CSGO) QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnCvarRetrieved);
-	if(g_Engine == Engine_CSS) QueryClientConVar(client, "zoom_sensitivity_ratio", OnCvarRetrieved);
+	if(g_Engine == Engine_CSS) QueryClientConVar(client, "cl_yawspeed", OnYawSpeedRetrieved);
+	QueryClientConVar(client, "in_usekeyboardsampletime", OnKSTRetrieved);
+	QueryClientConVar(client, "m_yaw", OnYawRetrieved);
+	QueryClientConVar(client, "m_filter", OnFilterRetrieved);
+	QueryClientConVar(client, "m_customaccel", OnCustomAccelRetrieved);
+	QueryClientConVar(client, "m_customaccel_max", OnCustomAccelMaxRetrieved);
+	QueryClientConVar(client, "m_customaccel_scale", OnCustomAccelScaleRetrieved);
+	QueryClientConVar(client, "m_customaccel_exponent", OnCustomAccelExRetrieved);
+	QueryClientConVar(client, "m_rawinput", OnRawInputRetrieved);
+	QueryClientConVar(client, "sensitivity", OnSensitivityRetrieved);
+	QueryClientConVar(client, "joy_yawsensitivity", OnYawSensitivityRetrieved);
+	QueryClientConVar(client, "joystick", OnJoystickRetrieved);
+	if(g_Engine == Engine_CSGO) QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnZoomSensitivityRetrieved);
+	if(g_Engine == Engine_CSS) QueryClientConVar(client, "zoom_sensitivity_ratio", OnZoomSensitivityRetrieved);
 } 
 
-public void OnCvarRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+public void OnYawSpeedRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
-	if(StrEqual(cvarName, "cl_yawspeed"))
-	{
-		g_iYawSpeed[client] = StringToFloat(cvarValue);
+	g_iYawSpeed[client] = StringToFloat(cvarValue);
 	
-		if(g_iYawSpeed[client] < 0)
-		{
-			KickClient(client, "cl_yawspeed cannot be negative");
-		}
-	}
-	else if(StrEqual(cvarName, "in_usekeyboardsampletime"))
+	if(g_iYawSpeed[client] < 0)
 	{
-		if(g_bCheckedKeyboardSampleTime[client] == false)
-		{
-			g_iKeyboardSampleTime[client]        = StringToInt(cvarValue);
-			g_bCheckedKeyboardSampleTime[client] = true;
-		}
-		else
-		{
-			int value = StringToInt(cvarValue);
-			if(value != g_iKeyboardSampleTime[client])
-			{
-				//AnticheatLog("%L changed their in_usekeyboardsampletime ConVar to %d", client, value);
-				PrintToAdmins("%N changed their in_usekeyboardsampletime ConVar to %d", client, value);
-				g_iKeyboardSampleTime[client] = value;
-			}
-		}
-	}
-	else if(StrEqual(cvarName, "m_yaw"))
-	{
-		float mYaw = StringToFloat(cvarValue);
-		if(mYaw != g_mYaw[client])
-		{
-			g_mYaw[client] = mYaw;
-			g_mYawChangedCount[client]++;
-			
-			if(g_mYawChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_yaw ConVar to %.2f", client, mYaw);
-				//AnticheatLog("%L changed their m_yaw ConVar to %.2f", client, mYaw);
-			}
-		}
-		
-		g_mYawCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "m_filter"))
-	{
-		bool mFilter = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
-		if(mFilter != g_mFilter[client])
-		{
-			g_mFilterChangedCount[client]++;
-			g_mFilter[client] = mFilter;
-			
-			if(g_mFilterChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_filter ConVar to %d", client, mFilter);
-				//AnticheatLog("%L changed their m_filter ConVar to %d", client, mFilter);
-			}
-		}
-		
-		g_mFilterCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "m_customaccel"))
-	{
-		int mCustomAccel = StringToInt(cvarValue);
-		
-		if(mCustomAccel != g_mCustomAccel[client])
-		{
-			g_mCustomAccel[client] = mCustomAccel;
-			g_mCustomAccelChangedCount[client]++;
-			
-			if(g_mCustomAccelChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_customaccel ConVar to %d", client, mCustomAccel);
-				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
-			}
-		}
-		
-		g_mCustomAccelCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "m_customaccel_max"))
-	{
-		float mCustomAccelMax = StringToFloat(cvarValue);
-		
-		if(mCustomAccelMax != g_mCustomAccelMax[client])
-		{
-			g_mCustomAccelMax[client] = mCustomAccelMax;
-			g_mCustomAccelMaxChangedCount[client]++;
-			
-			if(g_mCustomAccelMaxChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_customaccel_max ConVar to %f", client, mCustomAccelMax);
-			}
-		}
-		
-		g_mCustomAccelMaxCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "m_customaccel_scale"))
-	{
-		float mCustomAccelScale = StringToFloat(cvarValue);
-		
-		if(mCustomAccelScale != g_mCustomAccelScale[client])
-		{
-			g_mCustomAccelScale[client] = mCustomAccelScale;
-			g_mCustomAccelScaleChangedCount[client]++;
-			
-			if(g_mCustomAccelScaleChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_customaccel_scale ConVar to %f", client, mCustomAccelScale);
-				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
-			}
-		}
-		
-		g_mCustomAccelScaleCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "m_customaccel_exponent"))
-	{
-		float mCustomAccelExponent = StringToFloat(cvarValue);
-		
-		if(mCustomAccelExponent != g_mCustomAccelExponent[client])
-		{
-			g_mCustomAccelExponent[client] = mCustomAccelExponent;
-			g_mCustomAccelExponentChangedCount[client]++;
-			
-			if(g_mCustomAccelExponentChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_customaccel_exponent ConVar to %f", client, mCustomAccelExponent);
-				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
-			}
-		}
-		
-		g_mCustomAccelExponentCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "m_rawinput"))
-	{
-		bool mRawInput = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
-		if(mRawInput != g_mRawInput[client])
-		{
-			g_mRawInputChangedCount[client]++;
-			g_mRawInput[client] = mRawInput;
-			
-			if(g_mRawInputChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their m_rawinput ConVar to %d", client, mRawInput);
-				AnticheatLog(client, "%L changed their m_rawinput ConVar to %d", mRawInput);
-			}
-		}
-		
-		g_mRawInputCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "sensitivity"))
-	{
-		float sensitivity = StringToFloat(cvarValue);
-		if(sensitivity != g_Sensitivity[client])
-		{
-			g_Sensitivity[client] = sensitivity;
-			g_SensitivityChangedCount[client]++;
-			
-			if(g_SensitivityChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their sensitivity ConVar to %.2f", client, sensitivity);
-				//AnticheatLog("%L changed their sensitivity ConVar to %.2f", client, sensitivity);
-			}
-		}
-		
-		g_SensitivityCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "joy_yawsensitivity"))
-	{
-		float sensitivity = StringToFloat(cvarValue);
-		if(sensitivity != g_JoySensitivity[client])
-		{
-			g_JoySensitivity[client] = sensitivity;
-			g_JoySensitivityChangedCount[client]++;
-			
-			if(g_JoySensitivityChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
-				//AnticheatLog("%L changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
-			}
-		}
-		
-		g_JoySensitivityCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "zoom_sensitivity_ratio") || StrEqual(cvarName, "zoom_sensitivity_ratio_mouse"))
-	{
-		float sensitivity = StringToFloat(cvarValue);
-		if(sensitivity != g_ZoomSensitivity[client])
-		{
-			g_ZoomSensitivity[client] = sensitivity;
-			g_ZoomSensitivityChangedCount[client]++;
-			
-			if(g_ZoomSensitivityChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their %s ConVar to %.2f", client, cvarName, sensitivity);
-				//AnticheatLog("%L changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
-			}
-		}
-		
-		g_ZoomSensitivityCheckedCount[client]++;
-	}
-	else if(StrEqual(cvarName, "joystick"))
-	{
-		bool joyStick = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
-		if(joyStick != g_JoyStick[client])
-		{
-			g_JoyStickChangedCount[client]++;
-			g_JoyStick[client] = joyStick;
-			
-			if(g_JoyStickChangedCount[client] > 1)
-			{
-				PrintToAdmins("%N changed their joystick ConVar to %d", client, joyStick);
-				//AnticheatLog("%L changed their joystick ConVar to %d", client, joyStick);
-			}
-		}
-		
-		g_JoyStickCheckedCount[client]++;
+		KickClient(client, "cl_yawspeed cannot be negative");
 	}
 }
+
+public void OnKSTRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	if(g_bCheckedKeyboardSampleTime[client] == false)
+	{
+		g_iKeyboardSampleTime[client]        = StringToInt(cvarValue);
+		g_bCheckedKeyboardSampleTime[client] = true;
+	}
+	else
+	{
+		int value = StringToInt(cvarValue);
+		if(value != g_iKeyboardSampleTime[client])
+		{
+				//AnticheatLog("%L changed their in_usekeyboardsampletime ConVar to %d", client, value);
+			PrintToAdmins("%N changed their in_usekeyboardsampletime ConVar to %d", client, value);
+			g_iKeyboardSampleTime[client] = value;
+		}
+	}
+}
+
+public void OnYawRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float mYaw = StringToFloat(cvarValue);
+	if(mYaw != g_mYaw[client])
+	{
+		g_mYaw[client] = mYaw;
+		g_mYawChangedCount[client]++;
+		
+		if(g_mYawChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_yaw ConVar to %.2f", client, mYaw);
+				//AnticheatLog("%L changed their m_yaw ConVar to %.2f", client, mYaw);
+		}
+	}
+	
+	g_mYawCheckedCount[client]++;
+}
+
+public void OnFilterRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	bool mFilter = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
+	if(mFilter != g_mFilter[client])
+	{
+		g_mFilterChangedCount[client]++;
+		g_mFilter[client] = mFilter;
+		
+		if(g_mFilterChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_filter ConVar to %d", client, mFilter);
+				//AnticheatLog("%L changed their m_filter ConVar to %d", client, mFilter);
+		}
+	}
+	
+	g_mFilterCheckedCount[client]++;
+}
+
+public void OnCustomAccelRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	int mCustomAccel = StringToInt(cvarValue);
+	
+	if(mCustomAccel != g_mCustomAccel[client])
+	{
+		g_mCustomAccel[client] = mCustomAccel;
+		g_mCustomAccelChangedCount[client]++;
+		
+		if(g_mCustomAccelChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_customaccel ConVar to %d", client, mCustomAccel);
+				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
+		}
+	}
+	
+	g_mCustomAccelCheckedCount[client]++;
+}
+
+public void OnCustomAccelMaxRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float mCustomAccelMax = StringToFloat(cvarValue);
+	
+	if(mCustomAccelMax != g_mCustomAccelMax[client])
+	{
+		g_mCustomAccelMax[client] = mCustomAccelMax;
+		g_mCustomAccelMaxChangedCount[client]++;
+		
+		if(g_mCustomAccelMaxChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_customaccel_max ConVar to %f", client, mCustomAccelMax);
+		}
+	}
+	
+	g_mCustomAccelMaxCheckedCount[client]++;
+}
+
+public void OnCustomAccelScaleRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float mCustomAccelScale = StringToFloat(cvarValue);
+	
+	if(mCustomAccelScale != g_mCustomAccelScale[client])
+	{
+		g_mCustomAccelScale[client] = mCustomAccelScale;
+		g_mCustomAccelScaleChangedCount[client]++;
+		
+		if(g_mCustomAccelScaleChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_customaccel_scale ConVar to %f", client, mCustomAccelScale);
+				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
+		}
+	}
+	
+	g_mCustomAccelScaleCheckedCount[client]++;
+}
+
+public void OnCustomAccelExRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float mCustomAccelExponent = StringToFloat(cvarValue);
+	
+	if(mCustomAccelExponent != g_mCustomAccelExponent[client])
+	{
+		g_mCustomAccelExponent[client] = mCustomAccelExponent;
+		g_mCustomAccelExponentChangedCount[client]++;
+		
+		if(g_mCustomAccelExponentChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_customaccel_exponent ConVar to %f", client, mCustomAccelExponent);
+				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
+		}
+	}
+	
+	g_mCustomAccelExponentCheckedCount[client]++;
+}
+
+public void OnRawInputRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	bool mRawInput = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
+	if(mRawInput != g_mRawInput[client])
+	{
+		g_mRawInputChangedCount[client]++;
+		g_mRawInput[client] = mRawInput;
+		
+		if(g_mRawInputChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their m_rawinput ConVar to %d", client, mRawInput);
+			AnticheatLog(client, "%L changed their m_rawinput ConVar to %d", mRawInput);
+		}
+	}
+	
+	g_mRawInputCheckedCount[client]++;
+}
+
+public void OnSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float sensitivity = StringToFloat(cvarValue);
+	if(sensitivity != g_Sensitivity[client])
+	{
+		g_Sensitivity[client] = sensitivity;
+		g_SensitivityChangedCount[client]++;
+		
+		if(g_SensitivityChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their sensitivity ConVar to %.2f", client, sensitivity);
+				//AnticheatLog("%L changed their sensitivity ConVar to %.2f", client, sensitivity);
+		}
+	}
+	
+	g_SensitivityCheckedCount[client]++;
+}
+
+public void OnYawSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float sensitivity = StringToFloat(cvarValue);
+	if(sensitivity != g_JoySensitivity[client])
+	{
+		g_JoySensitivity[client] = sensitivity;
+		g_JoySensitivityChangedCount[client]++;
+		
+		if(g_JoySensitivityChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
+				//AnticheatLog("%L changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
+		}
+	}
+	
+	g_JoySensitivityCheckedCount[client]++;
+}
+
+public void OnZoomSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	float sensitivity = StringToFloat(cvarValue);
+	if(sensitivity != g_ZoomSensitivity[client])
+	{
+		g_ZoomSensitivity[client] = sensitivity;
+		g_ZoomSensitivityChangedCount[client]++;
+		
+		if(g_ZoomSensitivityChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their %s ConVar to %.2f", client, cvarName, sensitivity);
+				//AnticheatLog("%L changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
+		}
+	}
+	
+	g_ZoomSensitivityCheckedCount[client]++;
+}
+
+public void OnJoystickRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
+{
+	bool joyStick = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
+	if(joyStick != g_JoyStick[client])
+	{
+		g_JoyStickChangedCount[client]++;
+		g_JoyStick[client] = joyStick;
+		
+		if(g_JoyStickChangedCount[client] > 1)
+		{
+			PrintToAdmins("%N changed their joystick ConVar to %d", client, joyStick);
+				//AnticheatLog("%L changed their joystick ConVar to %d", client, joyStick);
+		}
+	}
+	
+	g_JoyStickCheckedCount[client]++;
+}
+
 
 public Action Hook_OnTouch(int client, int entity)
 {
@@ -935,6 +958,19 @@ public Action Bash_Stats(int client, int args)
 		}
 	}
 	
+	return Plugin_Handled;
+}
+
+public Action Bash_AdminMode(int client, int args)
+{
+	if(g_bAdminMode[client])
+	{
+		g_bAdminMode[client] = !g_bAdminMode[client];
+		ReplyToCommand(client, "[BASH] You are no longer in admin mode.");
+	} else {
+		g_bAdminMode[client] = !g_bAdminMode[client]
+		ReplyToCommand(client, "[BASH] You are now in admin mode.");
+	}
 	return Plugin_Handled;
 }
 
