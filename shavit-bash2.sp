@@ -433,7 +433,13 @@ stock bool PrintToDiscord(int client, const char[] log, any ...)
 		
 		Embed.SetColor("#ff2222");
 		Embed.SetTitle(hostName);
-		Embed.AddField("Player", clientName, true);
+		
+		char steamid[65];
+		char playerName[512];
+		GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof( steamid ));
+		Format(playerName, sizeof(playerName), "[%N](http://www.steamcommunity.com/profiles/%s)", client, steamid);
+		
+		Embed.AddField("Player", playerName, true);
 		Embed.AddField("Event", log, true);
 		
 		hook.Embed(Embed);
