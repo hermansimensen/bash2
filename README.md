@@ -22,3 +22,4 @@ bash_discord_webhook - The url for the discord webhook.
 Discord API (https://github.com/Deathknife/sourcemod-discord) + SteamWorks & SMJansson
 
 
+![Bash2.0 Discord Demo](https://i.imgur.com/lrvCf1F.png)
