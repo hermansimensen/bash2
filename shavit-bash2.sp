@@ -2282,6 +2282,7 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			#endif
 			
 			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f , Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
 			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
