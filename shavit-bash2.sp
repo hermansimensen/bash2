@@ -2274,7 +2274,14 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			positivePct = float(positiveCount) / float(MAX_FRAMES_KEYSWITCH);
 			timingPct   = float(timingCount) / float(MAX_FRAMES_KEYSWITCH);
 			
-			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
+			char sStyle[32];
+			#if defined TIMER
+			int style = Shavit_GetBhopStyle(client);
+			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
+			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
+			#endif
+			
+			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
 			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
