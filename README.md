@@ -14,3 +14,9 @@ bash_antinull - lets you disable or enable null kicking
 bash_banlength - lets you set banlength
 
 bash_autoban - disable/enable automatic banning. 
+
+bash_discord - Enable/Disable discord logging
+
+bash_discord_webhook - The url for the discord webhook.
+
+

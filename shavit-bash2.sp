@@ -424,7 +424,6 @@ stock bool PrintToDiscord(int client, const char[] log, any ...)
 		char hostName[128];
 		GetConVarString(FindConVar("hostname"), hostName, 128);
 		
-		PrintToServer("Webhook URL: %s", webhook);
 		DiscordWebHook hook = new DiscordWebHook(webhook);
 		hook.SlackMode = true;
 		
