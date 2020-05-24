@@ -1,4 +1,5 @@
 #define TIMER
+#define DISCORD
 
 #include <sourcemod>
 #include <sdktools>
@@ -10,9 +11,14 @@
 #include <shavit>
 #endif
 
+#if defined DISCORD
+#include <discord>
+#endif
+
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
 #include <sendproxy>
+
 
 #pragma newdecls required
 
@@ -167,6 +173,7 @@ bool g_bLateLoad;
 
 Handle g_hTeleport;
 bool   g_bDhooksLoaded;
+bool   g_bDiscordLoaded;
 #if defined TIMER
 bool   g_bSendProxyLoaded;
 #endif
@@ -175,6 +182,8 @@ ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
 ConVar g_hAutoban;
+ConVar g_hLogToDiscord;
+ConVar g_hWebhook;
 bool g_bAdminMode[MAXPLAYERS + 1];
 
 //shavit
@@ -192,6 +201,8 @@ public void OnPluginStart()
 	AutoExecConfig(true, "bash", "sourcemod");
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
+	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
+	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", _);
 	
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
 	
@@ -224,6 +235,8 @@ public void OnAllPluginsLoaded()
 		g_bDhooksLoaded = true;
 	}
 	
+	g_bDiscordLoaded = LibraryExists("discord-api");
+	
 	#if defined TIMER
 	g_bSendProxyLoaded = LibraryExists("sendproxy");
 	#endif
@@ -239,7 +252,12 @@ public void OnLibraryAdded(const char[] name)
 	{
 		Initialize();
 		g_bDhooksLoaded = true;
-    }
+	}
+	
+	if(StrEqual(name, "discord-api"))
+	{
+		g_bDiscordLoaded = true;
+	}
 	
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
@@ -394,7 +412,38 @@ void SaveOldLogs()
 
 stock bool PrintToDiscord(int client, const char[] log, any ...)
 {
-	
+	if(g_bDiscordLoaded)
+	{
+		#if defined DISCORD
+		char webhook[255];
+		GetConVarString(g_hWebhook, webhook, 255);
+		
+		char clientName[32];
+		GetClientName(client, clientName, 32);
+		
+		char hostName[128];
+		GetConVarString(FindConVar("hostname"), hostName, 128);
+		
+		PrintToServer("Webhook URL: %s", webhook);
+		DiscordWebHook hook = new DiscordWebHook(webhook);
+		hook.SlackMode = true;
+		
+		hook.SetUsername("BASH 2.0");
+		
+		MessageEmbed Embed = new MessageEmbed();
+		
+		Embed.SetColor("#ff2222");
+		Embed.SetTitle(hostName);
+		Embed.AddField("Player", clientName, true);
+		Embed.AddField("Event", log, true);
+		
+		hook.Embed(Embed);
+		
+		hook.Send();
+		delete hook;
+		return true;
+		#endif
+	}
 	return false;
 }
 
@@ -403,6 +452,10 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	char buffer[1024];
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
+	
+	if(g_hLogToDiscord.BoolValue && LibraryExists("discord-api")) {
+		PrintToDiscord(client, buffer);
+	}
 	
 	Handle myHandle = GetMyHandle();
 	char sPlugin[PLATFORM_MAX_PATH];
