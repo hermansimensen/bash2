@@ -15,6 +15,7 @@ bash_banlength - lets you set banlength
 bash_autoban - disable/enable automatic banning. 
 bash_discord - Enable/Disable discord logging
 bash_discord_webhook - The url for the discord webhook.
+bash_discord_only_bans - If enabled, only kicks and bans will be printed to the discord log. 
 ```
 
 ### Depencenies

@@ -31,7 +31,7 @@ public Plugin myinfo =
 	author = "Blacky, edited by carnifex",
 	description = "Detects strafe hackers",
 	version = "2.0",
-	url = "http://steamcommunity.com/id/blaackyy/"
+	url = "https://github.com/hermansimensen/bash2"
 };
 
 // Definitions
@@ -184,7 +184,10 @@ ConVar g_hAntiNull;
 ConVar g_hAutoban;
 ConVar g_hLogToDiscord;
 ConVar g_hWebhook;
+ConVar g_hOnlyPrintBan;
 bool g_bAdminMode[MAXPLAYERS + 1];
+char g_sHostName[128];
+char g_sWebhook[255];
 
 //shavit
 stylesettings_t g_aStyleSettings[STYLE_LIMIT];
@@ -203,6 +206,7 @@ public void OnPluginStart()
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
 	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
 	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", _);
+	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
 	
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
 	
@@ -343,7 +347,11 @@ public MRESReturn Hook_DHooks_Teleport(int client, Handle hParams)
 void AutoBanPlayer(int client)
 {
 	if(g_hAutoban.BoolValue && IsClientInGame(client) && !IsClientInKickQueue(client))
+	{
 		ServerCommand("sm_ban #%d %s Cheating", GetClientUserId(client), g_sBanLength);
+		PrintToDiscord(client, "Banned for cheating.");
+		
+	}
 }
 
 float g_fLag_LastCheckTime;
@@ -415,16 +423,11 @@ stock bool PrintToDiscord(int client, const char[] log, any ...)
 	if(g_bDiscordLoaded)
 	{
 		#if defined DISCORD
-		char webhook[255];
-		GetConVarString(g_hWebhook, webhook, 255);
 		
 		char clientName[32];
 		GetClientName(client, clientName, 32);
 		
-		char hostName[128];
-		GetConVarString(FindConVar("hostname"), hostName, 128);
-		
-		DiscordWebHook hook = new DiscordWebHook(webhook);
+		DiscordWebHook hook = new DiscordWebHook(g_sWebhook);
 		hook.SlackMode = true;
 		
 		hook.SetUsername("BASH 2.0");
@@ -432,11 +435,11 @@ stock bool PrintToDiscord(int client, const char[] log, any ...)
 		MessageEmbed Embed = new MessageEmbed();
 		
 		Embed.SetColor("#ff2222");
-		Embed.SetTitle(hostName);
+		Embed.SetTitle(g_sHostName);
 		
 		char steamid[65];
 		char playerName[512];
-		GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof( steamid ));
+		GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof(steamid));
 		Format(playerName, sizeof(playerName), "[%N](http://www.steamcommunity.com/profiles/%s)", client, steamid);
 		
 		Embed.AddField("Player", playerName, true);
@@ -458,7 +461,7 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
 	
-	if(g_hLogToDiscord.BoolValue && LibraryExists("discord-api")) {
+	if(g_hLogToDiscord.BoolValue && LibraryExists("discord-api") && !g_hOnlyPrintBan.BoolValue) {
 		PrintToDiscord(client, buffer);
 	}
 	
@@ -566,6 +569,8 @@ public Action Timer_MOTD(Handle timer, any data)
 
 public void OnMapStart()
 {
+	GetConVarString(FindConVar("hostname"), g_sHostName, 128);
+	GetConVarString(g_hWebhook, g_sWebhook, 255);
 	CreateTimer(0.2, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 	
 	if(g_bLateLoad)
@@ -2282,7 +2287,7 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			#endif
 			
 			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
-			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f , Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
 			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
@@ -2299,6 +2304,7 @@ public Action Timer_NullKick(Handle timer, int userid)
 	if(client != 1)
 	{
 		KickClient(client, "Kicked for potentional movement config");
+		PrintToDiscord(client, "Kicked for potential movement config.");
 	}
 }
 
