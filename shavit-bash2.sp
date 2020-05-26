@@ -1,4 +1,5 @@
 #define TIMER
+#define DISCORD
 
 #include <sourcemod>
 #include <sdktools>
@@ -10,9 +11,14 @@
 #include <shavit>
 #endif
 
+#if defined DISCORD
+#include <discord>
+#endif
+
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
 #include <sendproxy>
+
 
 #pragma newdecls required
 
@@ -25,7 +31,7 @@ public Plugin myinfo =
 	author = "Blacky, edited by carnifex",
 	description = "Detects strafe hackers",
 	version = "2.0",
-	url = "http://steamcommunity.com/id/blaackyy/"
+	url = "https://github.com/hermansimensen/bash2"
 };
 
 // Definitions
@@ -167,6 +173,7 @@ bool g_bLateLoad;
 
 Handle g_hTeleport;
 bool   g_bDhooksLoaded;
+bool   g_bDiscordLoaded;
 #if defined TIMER
 bool   g_bSendProxyLoaded;
 #endif
@@ -175,7 +182,12 @@ ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
 ConVar g_hAutoban;
+ConVar g_hLogToDiscord;
+ConVar g_hWebhook;
+ConVar g_hOnlyPrintBan;
 bool g_bAdminMode[MAXPLAYERS + 1];
+char g_sHostName[128];
+char g_sWebhook[255];
 
 //shavit
 stylesettings_t g_aStyleSettings[STYLE_LIMIT];
@@ -192,6 +204,9 @@ public void OnPluginStart()
 	AutoExecConfig(true, "bash", "sourcemod");
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
+	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
+	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", _);
+	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
 	
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
 	
@@ -224,6 +239,8 @@ public void OnAllPluginsLoaded()
 		g_bDhooksLoaded = true;
 	}
 	
+	g_bDiscordLoaded = LibraryExists("discord-api");
+	
 	#if defined TIMER
 	g_bSendProxyLoaded = LibraryExists("sendproxy");
 	#endif
@@ -239,7 +256,12 @@ public void OnLibraryAdded(const char[] name)
 	{
 		Initialize();
 		g_bDhooksLoaded = true;
-    }
+	}
+	
+	if(StrEqual(name, "discord-api"))
+	{
+		g_bDiscordLoaded = true;
+	}
 	
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
@@ -325,7 +347,11 @@ public MRESReturn Hook_DHooks_Teleport(int client, Handle hParams)
 void AutoBanPlayer(int client)
 {
 	if(g_hAutoban.BoolValue && IsClientInGame(client) && !IsClientInKickQueue(client))
+	{
 		ServerCommand("sm_ban #%d %s Cheating", GetClientUserId(client), g_sBanLength);
+		PrintToDiscord(client, "Banned for cheating.");
+		
+	}
 }
 
 float g_fLag_LastCheckTime;
@@ -394,7 +420,38 @@ void SaveOldLogs()
 
 stock bool PrintToDiscord(int client, const char[] log, any ...)
 {
-	
+	if(g_bDiscordLoaded)
+	{
+		#if defined DISCORD
+		
+		char clientName[32];
+		GetClientName(client, clientName, 32);
+		
+		DiscordWebHook hook = new DiscordWebHook(g_sWebhook);
+		hook.SlackMode = true;
+		
+		hook.SetUsername("BASH 2.0");
+		
+		MessageEmbed Embed = new MessageEmbed();
+		
+		Embed.SetColor("#ff2222");
+		Embed.SetTitle(g_sHostName);
+		
+		char steamid[65];
+		char playerName[512];
+		GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof(steamid));
+		Format(playerName, sizeof(playerName), "[%N](http://www.steamcommunity.com/profiles/%s)", client, steamid);
+		
+		Embed.AddField("Player", playerName, true);
+		Embed.AddField("Event", log, true);
+		
+		hook.Embed(Embed);
+		
+		hook.Send();
+		delete hook;
+		return true;
+		#endif
+	}
 	return false;
 }
 
@@ -403,6 +460,10 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	char buffer[1024];
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
+	
+	if(g_hLogToDiscord.BoolValue && LibraryExists("discord-api") && !g_hOnlyPrintBan.BoolValue) {
+		PrintToDiscord(client, buffer);
+	}
 	
 	Handle myHandle = GetMyHandle();
 	char sPlugin[PLATFORM_MAX_PATH];
@@ -508,6 +569,8 @@ public Action Timer_MOTD(Handle timer, any data)
 
 public void OnMapStart()
 {
+	GetConVarString(FindConVar("hostname"), g_sHostName, 128);
+	GetConVarString(g_hWebhook, g_sWebhook, 255);
 	CreateTimer(0.2, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 	
 	if(g_bLateLoad)
@@ -2216,7 +2279,15 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			positivePct = float(positiveCount) / float(MAX_FRAMES_KEYSWITCH);
 			timingPct   = float(timingCount) / float(MAX_FRAMES_KEYSWITCH);
 			
-			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
+			char sStyle[32];
+			#if defined TIMER
+			int style = Shavit_GetBhopStyle(client);
+			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
+			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
+			#endif
+			
+			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
 			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
@@ -2233,6 +2304,7 @@ public Action Timer_NullKick(Handle timer, int userid)
 	if(client != 1)
 	{
 		KickClient(client, "Kicked for potentional movement config");
+		PrintToDiscord(client, "Kicked for potential movement config.");
 	}
 }
 
