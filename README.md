@@ -19,8 +19,10 @@ bash_discord_only_bans - If enabled, only kicks and bans will be printed to the 
 ```
 
 ### Depencenies
+Discord API (https://github.com/Deathknife/sourcemod-discord) + SteamWorks & SMJansson.
 
-Discord API (https://github.com/Deathknife/sourcemod-discord) + SteamWorks & SMJansson
+### Anticheat bypass
+If you are using bhoptimer, you can add "bash_bypass" to a styles special string to disable detection for this style.
 
 
 ![Bash2.0 Discord Demo](https://i.imgur.com/lrvCf1F.png)
