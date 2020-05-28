@@ -106,7 +106,6 @@ float g_fLastPosition[MAXPLAYERS + 1][3];
 int   g_iLastTeleportTick[MAXPLAYERS + 1];
 float g_fAngleDifference[MAXPLAYERS + 1][2];
 float g_fLastAngleDifference[MAXPLAYERS + 1][2];
-bool  g_bIsBeingTimed[MAXPLAYERS +1];
 
 // Gain calculation
 int   g_strafeTick[MAXPLAYERS + 1];
@@ -190,8 +189,12 @@ char g_sHostName[128];
 char g_sWebhook[255];
 
 //shavit
+
+#if defined TIMER
 stylesettings_t g_aStyleSettings[STYLE_LIMIT];
 stylestrings_t g_sStyleStrings[STYLE_LIMIT];
+bool  g_bIsBeingTimed[MAXPLAYERS +1];
+#endif
 
 public void OnPluginStart()
 {
@@ -1809,13 +1812,18 @@ void CheckForWOnlyHack(int client)
 		timingPct  = float(timingCount) / float(MAX_FRAMES);
 		if(illegalPct > 0.6)
 		{
-			char sStyle[32];
+			
 			#if defined TIMER
+			char sStyle[32];
 			int style = Shavit_GetBhopStyle(client);
 			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
-			#endif
 			AnticheatLog(client, "angle snap hack, Pct: %.2f％, Timing: %.1f％, Style: %s", illegalPct * 100.0, timingPct * 100.0, sStyle);
+			#endif
+			
+			#if !defined TIMER
+			AnticheatLog(client, "angle snap hack, Pct: %.2f％, Timing: %.1f％", illegalPct * 100.0, timingPct * 100.0);
+			#endif
 		}
 	}
 	
@@ -2279,15 +2287,19 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			positivePct = float(positiveCount) / float(MAX_FRAMES_KEYSWITCH);
 			timingPct   = float(timingCount) / float(MAX_FRAMES_KEYSWITCH);
 			
-			char sStyle[32];
+			
 			#if defined TIMER
+			char sStyle[32];
 			int style = Shavit_GetBhopStyle(client);
 			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
 			#endif
 			
 			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
-			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
+			#if !defined TIMER
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
+			#endif
 			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
