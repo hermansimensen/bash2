@@ -188,6 +188,9 @@ bool g_bAdminMode[MAXPLAYERS + 1];
 char g_sHostName[128];
 char g_sWebhook[255];
 
+char g_aclogfile[PLATFORM_MAX_PATH];
+char g_sPlayerIp[128];
+
 //shavit
 
 #if defined TIMER
@@ -198,6 +201,11 @@ bool  g_bIsBeingTimed[MAXPLAYERS +1];
 
 public void OnPluginStart()
 {
+	char sDate[64];
+	FormatTime(sDate, sizeof(sDate), "%y%m%d", GetTime());
+	
+	BuildPath(Path_SM, g_aclogfile, PLATFORM_MAX_PATH, "logs/ac_%s.txt", sDate);
+
 	UserMsg umVGUIMenu = GetUserMessageId("VGUIMenu");
 	if (umVGUIMenu == INVALID_MESSAGE_ID)
 		SetFailState("UserMsg `umVGUIMenu` not found!");
@@ -468,37 +476,7 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 		PrintToDiscord(client, buffer);
 	}
 	
-	Handle myHandle = GetMyHandle();
-	char sPlugin[PLATFORM_MAX_PATH];
-	GetPluginFilename(myHandle, sPlugin, PLATFORM_MAX_PATH);
-	
-	char sPlayer[128];
-	GetClientAuthId(client, AuthId_Steam2, sPlayer, sizeof(sPlayer));
-	
-	char sPlayerIp[32];
-	GetClientIP(client, sPlayerIp, sizeof(sPlayerIp));
-	Format(sPlayer, sizeof(sPlayer), "%N<%s><%s>", client, sPlayer, sPlayerIp);
-	
-	char sTime[64];
-	FormatTime(sTime, sizeof(sTime), "%X", GetTime());
-	Format(buffer, 1024, "[%s] %s: %s %s", sPlugin, sTime, sPlayer, buffer);
-	
-	char sDate[64];
-	FormatTime(sDate, sizeof(sDate), "%y%m%d", GetTime());
-	char sPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sPath, sizeof(sPath), "logs/ac_%s.txt", sDate);
-	File hFile = OpenFile(sPath, "a");
-	if(hFile != INVALID_HANDLE)
-	{
-		WriteFileLine(hFile, buffer);
-		delete hFile;
-		return true;
-	}
-	else
-	{
-		LogError("Couldn't open timer log file.");
-		return false;
-	}
+	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp, buffer);
 }
 
 public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcast)
@@ -582,6 +560,7 @@ public void OnMapStart()
 		{
 			if(IsClientInGame(iclient))
 			{
+				OnClientConnected(iclient);
 				OnClientPutInServer(iclient);
 			}
 		}
@@ -599,6 +578,11 @@ public Action Timer_UpdateYaw(Handle timer, any data)
 			QueryForCvars(iclient);
 		}
 	}
+}
+
+public void OnClientConnected(int client)
+{
+	GetClientIP(client, g_sPlayerIp, sizeof(g_sPlayerIp));
 }
 
 public void OnClientPostAdminCheck(int client) 
