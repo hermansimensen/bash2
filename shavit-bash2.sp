@@ -1,5 +1,4 @@
 #define TIMER
-#define DISCORD
 
 #include <sourcemod>
 #include <sdktools>
@@ -11,9 +10,8 @@
 #include <shavit>
 #endif
 
-#if defined DISCORD
+#undef REQUIRE_PLUGIN
 #include <discord>
-#endif
 
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
@@ -288,9 +286,15 @@ public void OnLibraryRemoved(const char[] name)
 	{
 		//g_bTasLoaded = false;
 	}
+	
 	else if(StrEqual(name, "dhooks"))
 	{
 		g_bDhooksLoaded = false;
+	}
+	
+	if(StrEqual(name, "discord-api"))
+	{
+		g_bDiscordLoaded = false;
 	}
 	
 	#if defined TIMER
@@ -429,12 +433,10 @@ void SaveOldLogs()
 	DeleteFile(sPath);
 }
 
-stock bool PrintToDiscord(int client, const char[] log, any ...)
+public void PrintToDiscord(int client, const char[] log, any ...)
 {
 	if(g_bDiscordLoaded)
 	{
-		#if defined DISCORD
-		
 		char clientName[32];
 		GetClientName(client, clientName, 32);
 		
@@ -460,10 +462,7 @@ stock bool PrintToDiscord(int client, const char[] log, any ...)
 		
 		hook.Send();
 		delete hook;
-		return true;
-		#endif
 	}
-	return false;
 }
 
 stock bool AnticheatLog(int client, const char[] log, any ...)
@@ -472,7 +471,7 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
 	
-	if(g_hLogToDiscord.BoolValue && LibraryExists("discord-api") && !g_hOnlyPrintBan.BoolValue) {
+	if(g_hLogToDiscord.BoolValue && g_bDiscordLoaded && !g_hOnlyPrintBan.BoolValue) {
 		PrintToDiscord(client, buffer);
 	}
 	
