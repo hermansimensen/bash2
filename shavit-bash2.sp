@@ -175,6 +175,7 @@ bool   g_bDiscordLoaded;
 bool   g_bSendProxyLoaded;
 #endif
 
+Handle g_fwOnLog;
 ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
@@ -216,6 +217,8 @@ public void OnPluginStart()
 	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
 	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", "", FCVAR_PROTECTED);
 	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
+	
+	g_fwOnLog = CreateGlobalForward("Bash_OnDetection", ET_Event, Param_Cell, Param_String);
 	
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
 	
@@ -470,6 +473,11 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	char buffer[1024];
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
+	
+	Call_StartForward(g_fwOnLog);
+	Call_PushCell(client);
+	Call_PushString(buffer);
+	Call_Finish();
 	
 	if(g_hLogToDiscord.BoolValue && g_bDiscordLoaded && !g_hOnlyPrintBan.BoolValue) {
 		PrintToDiscord(client, buffer);
