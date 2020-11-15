@@ -1,5 +1,4 @@
 #define TIMER
-#define DISCORD
 
 #include <sourcemod>
 #include <sdktools>
@@ -11,9 +10,8 @@
 #include <shavit>
 #endif
 
-#if defined DISCORD
+#undef REQUIRE_PLUGIN
 #include <discord>
-#endif
 
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
@@ -106,7 +104,6 @@ float g_fLastPosition[MAXPLAYERS + 1][3];
 int   g_iLastTeleportTick[MAXPLAYERS + 1];
 float g_fAngleDifference[MAXPLAYERS + 1][2];
 float g_fLastAngleDifference[MAXPLAYERS + 1][2];
-bool  g_bIsBeingTimed[MAXPLAYERS +1];
 
 // Gain calculation
 int   g_strafeTick[MAXPLAYERS + 1];
@@ -189,12 +186,24 @@ bool g_bAdminMode[MAXPLAYERS + 1];
 char g_sHostName[128];
 char g_sWebhook[255];
 
+char g_aclogfile[PLATFORM_MAX_PATH];
+char g_sPlayerIp[128];
+
 //shavit
+
+#if defined TIMER
 stylesettings_t g_aStyleSettings[STYLE_LIMIT];
 stylestrings_t g_sStyleStrings[STYLE_LIMIT];
+bool  g_bIsBeingTimed[MAXPLAYERS +1];
+#endif
 
 public void OnPluginStart()
 {
+	char sDate[64];
+	FormatTime(sDate, sizeof(sDate), "%y%m%d", GetTime());
+	
+	BuildPath(Path_SM, g_aclogfile, PLATFORM_MAX_PATH, "logs/ac_%s.txt", sDate);
+
 	UserMsg umVGUIMenu = GetUserMessageId("VGUIMenu");
 	if (umVGUIMenu == INVALID_MESSAGE_ID)
 		SetFailState("UserMsg `umVGUIMenu` not found!");
@@ -205,7 +214,7 @@ public void OnPluginStart()
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
 	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
-	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", _);
+	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", "", FCVAR_PROTECTED);
 	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
 	
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
@@ -277,9 +286,15 @@ public void OnLibraryRemoved(const char[] name)
 	{
 		//g_bTasLoaded = false;
 	}
+	
 	else if(StrEqual(name, "dhooks"))
 	{
 		g_bDhooksLoaded = false;
+	}
+	
+	if(StrEqual(name, "discord-api"))
+	{
+		g_bDiscordLoaded = false;
 	}
 	
 	#if defined TIMER
@@ -418,12 +433,10 @@ void SaveOldLogs()
 	DeleteFile(sPath);
 }
 
-stock bool PrintToDiscord(int client, const char[] log, any ...)
+public void PrintToDiscord(int client, const char[] log, any ...)
 {
 	if(g_bDiscordLoaded)
 	{
-		#if defined DISCORD
-		
 		char clientName[32];
 		GetClientName(client, clientName, 32);
 		
@@ -449,10 +462,7 @@ stock bool PrintToDiscord(int client, const char[] log, any ...)
 		
 		hook.Send();
 		delete hook;
-		return true;
-		#endif
 	}
-	return false;
 }
 
 stock bool AnticheatLog(int client, const char[] log, any ...)
@@ -461,41 +471,11 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
 	
-	if(g_hLogToDiscord.BoolValue && LibraryExists("discord-api") && !g_hOnlyPrintBan.BoolValue) {
+	if(g_hLogToDiscord.BoolValue && g_bDiscordLoaded && !g_hOnlyPrintBan.BoolValue) {
 		PrintToDiscord(client, buffer);
 	}
 	
-	Handle myHandle = GetMyHandle();
-	char sPlugin[PLATFORM_MAX_PATH];
-	GetPluginFilename(myHandle, sPlugin, PLATFORM_MAX_PATH);
-	
-	char sPlayer[128];
-	GetClientAuthId(client, AuthId_Steam2, sPlayer, sizeof(sPlayer));
-	
-	char sPlayerIp[32];
-	GetClientIP(client, sPlayerIp, sizeof(sPlayerIp));
-	Format(sPlayer, sizeof(sPlayer), "%N<%s><%s>", client, sPlayer, sPlayerIp);
-	
-	char sTime[64];
-	FormatTime(sTime, sizeof(sTime), "%X", GetTime());
-	Format(buffer, 1024, "[%s] %s: %s %s", sPlugin, sTime, sPlayer, buffer);
-	
-	char sDate[64];
-	FormatTime(sDate, sizeof(sDate), "%y%m%d", GetTime());
-	char sPath[PLATFORM_MAX_PATH];
-	BuildPath(Path_SM, sPath, sizeof(sPath), "logs/ac_%s.txt", sDate);
-	File hFile = OpenFile(sPath, "a");
-	if(hFile != INVALID_HANDLE)
-	{
-		WriteFileLine(hFile, buffer);
-		delete hFile;
-		return true;
-	}
-	else
-	{
-		LogError("Couldn't open timer log file.");
-		return false;
-	}
+	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp, buffer);
 }
 
 public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcast)
@@ -579,6 +559,7 @@ public void OnMapStart()
 		{
 			if(IsClientInGame(iclient))
 			{
+				OnClientConnected(iclient);
 				OnClientPutInServer(iclient);
 			}
 		}
@@ -596,6 +577,11 @@ public Action Timer_UpdateYaw(Handle timer, any data)
 			QueryForCvars(iclient);
 		}
 	}
+}
+
+public void OnClientConnected(int client)
+{
+	GetClientIP(client, g_sPlayerIp, sizeof(g_sPlayerIp));
 }
 
 public void OnClientPostAdminCheck(int client) 
@@ -1809,13 +1795,18 @@ void CheckForWOnlyHack(int client)
 		timingPct  = float(timingCount) / float(MAX_FRAMES);
 		if(illegalPct > 0.6)
 		{
-			char sStyle[32];
+			
 			#if defined TIMER
+			char sStyle[32];
 			int style = Shavit_GetBhopStyle(client);
 			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
-			#endif
 			AnticheatLog(client, "angle snap hack, Pct: %.2f％, Timing: %.1f％, Style: %s", illegalPct * 100.0, timingPct * 100.0, sStyle);
+			#endif
+			
+			#if !defined TIMER
+			AnticheatLog(client, "angle snap hack, Pct: %.2f％, Timing: %.1f％", illegalPct * 100.0, timingPct * 100.0);
+			#endif
 		}
 	}
 	
@@ -2279,15 +2270,19 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			positivePct = float(positiveCount) / float(MAX_FRAMES_KEYSWITCH);
 			timingPct   = float(timingCount) / float(MAX_FRAMES_KEYSWITCH);
 			
-			char sStyle[32];
+			
 			#if defined TIMER
+			char sStyle[32];
 			int style = Shavit_GetBhopStyle(client);
 			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
 			#endif
 			
 			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
-			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
+			#if !defined TIMER
+			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
+			#endif
 			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
