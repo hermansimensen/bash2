@@ -188,7 +188,7 @@ char g_sHostName[128];
 char g_sWebhook[255];
 
 char g_aclogfile[PLATFORM_MAX_PATH];
-char g_sPlayerIp[128];
+char g_sPlayerIp[MAXPLAYERS + 1][16];
 
 //shavit
 
@@ -483,7 +483,7 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 		PrintToDiscord(client, buffer);
 	}
 	
-	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp, buffer);
+	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp[client], buffer);
 }
 
 public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcast)
@@ -589,7 +589,7 @@ public Action Timer_UpdateYaw(Handle timer, any data)
 
 public void OnClientConnected(int client)
 {
-	GetClientIP(client, g_sPlayerIp, sizeof(g_sPlayerIp));
+	GetClientIP(client, g_sPlayerIp[client], 16);
 }
 
 public void OnClientPostAdminCheck(int client) 
