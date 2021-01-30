@@ -193,7 +193,6 @@ char g_sPlayerIp[MAXPLAYERS + 1][16];
 //shavit
 
 #if defined TIMER
-stylesettings_t g_aStyleSettings[STYLE_LIMIT];
 stylestrings_t g_sStyleStrings[STYLE_LIMIT];
 bool  g_bIsBeingTimed[MAXPLAYERS +1];
 #endif
@@ -680,9 +679,9 @@ public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, i
 {
 	#if defined TIMER
 	int style = Shavit_GetBhopStyle(entity);
-	Shavit_GetStyleSettings(style, g_aStyleSettings[style]);
+	bool autobhop = Shavit_GetStyleSettingBool(style, "autobhop");
 	
-	if(g_aStyleSettings[style].bAutobhop == false)
+	if(autobhop == false)
 		iValue &= ~FL_ONGROUND;
 	
 	return Plugin_Changed;
