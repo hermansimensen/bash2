@@ -860,7 +860,7 @@ public void OnRawInputRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 		if(g_mRawInputChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_rawinput ConVar to %d", client, mRawInput);
-			AnticheatLog(client, "%L changed their m_rawinput ConVar to %d", mRawInput);
+			//AnticheatLog(client, "%L changed their m_rawinput ConVar to %d", mRawInput);
 		}
 	}
 	
