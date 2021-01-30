@@ -186,6 +186,7 @@ ConVar g_hOnlyPrintBan;
 bool g_bAdminMode[MAXPLAYERS + 1];
 char g_sHostName[128];
 char g_sWebhook[255];
+ConVar g_hQueryRate;
 
 char g_aclogfile[PLATFORM_MAX_PATH];
 char g_sPlayerIp[MAXPLAYERS + 1][16];
@@ -215,6 +216,7 @@ public void OnPluginStart()
 	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
 	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", "", FCVAR_PROTECTED);
 	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
+	g_hQueryRate = CreateConVar("bash_query_rate", "0.2", "How often will convars be queried from the client?", _, true, 0.1, true, 2.0);
 	AutoExecConfig(true, "bash", "sourcemod");
 	
 	g_fwOnLog = CreateGlobalForward("Bash_OnDetection", ET_Event, Param_Cell, Param_String);
@@ -558,7 +560,7 @@ public void OnMapStart()
 {
 	GetConVarString(FindConVar("hostname"), g_sHostName, 128);
 	GetConVarString(g_hWebhook, g_sWebhook, 255);
-	CreateTimer(0.2, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
+	CreateTimer(g_hQueryRate.FloatValue, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 	
 	if(g_bLateLoad)
 	{
