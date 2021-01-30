@@ -2053,7 +2053,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	if(g_iStartStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
 	{
 		AnticheatLog(client, "too many perfect strafes in a row (%d)", g_iStartStrafe_PerfCount[client]);
-		//AutoBanPlayer(client);
+		AutoBanPlayer(client);
 	}
 	
 	if(g_iStartStrafe_CurrentFrame[client] == 0)
