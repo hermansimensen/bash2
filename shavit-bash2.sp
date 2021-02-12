@@ -488,7 +488,6 @@ public void PrintToDiscord(int client, const char[] log, any ...)
 		
 		hook.Send();
 		delete hook;
-	}
 }
 
 stock bool AnticheatLog(int client, const char[] log, any ...)
@@ -2386,6 +2385,11 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
 				CreateTimer(10.0, Timer_NullKick, GetClientUserId(client));
 			}
+		}
+
+		for(int i = 0; i < 2; i++)
+		{
+			g_aKeySwitchStats[client][i].Clear();
 		}
 	}
 }
