@@ -32,6 +32,31 @@ public Plugin myinfo =
 	url = "https://github.com/hermansimensen/bash2"
 };
 
+enum struct strafedata_t
+{
+	int buttons;
+	int turn_direction;
+	int move_direction;
+	int difference;
+	int tick;
+	bool is_timing;
+	bool is_recorded;
+}
+
+enum struct turningdata_t
+{
+	bool is_illegal;
+	bool is_timing;
+}
+
+enum struct keyswitchdata_t
+{
+	int buttons;
+	int difference;
+	bool is_timing;
+	bool is_recorded;
+}
+
 // Definitions
 #define Button_Forward 0
 #define Button_Back    1
@@ -79,6 +104,7 @@ public Plugin myinfo =
 #define DR_TurningInfraction (1 << 13) // Client turns at impossible speeds
 
 EngineVersion g_Engine;
+int   g_iMaxFrames;
 int   g_iRealButtons[MAXPLAYERS + 1];
 int   g_iButtons[MAXPLAYERS + 1][2];
 int   g_iLastButtons[MAXPLAYERS + 1][2];
@@ -135,25 +161,22 @@ float g_ZoomSensitivity[MAXPLAYERS + 1]; int g_ZoomSensitivityChangedCount[MAXPL
 bool  g_JoyStick[MAXPLAYERS + 1]; int g_JoyStickChangedCount[MAXPLAYERS + 1]; int g_JoyStickCheckedCount[MAXPLAYERS + 1];
 
 // Recorded data to analyze
-#define MAX_FRAMES 50
 #define MAX_FRAMES_KEYSWITCH 50
 int   g_iStartStrafe_CurrentFrame[MAXPLAYERS + 1];
-any   g_iStartStrafe_Stats[MAXPLAYERS + 1][MAX_FRAMES][7];
+ArrayList g_aStartStrafeStats[MAXPLAYERS + 1];
 int   g_iStartStrafe_LastRecordedTick[MAXPLAYERS + 1];
-bool  g_bStartStrafe_IsRecorded[MAXPLAYERS + 1][MAX_FRAMES];
 int   g_iStartStrafe_PerfCount[MAXPLAYERS + 1];
 int   g_iEndStrafe_CurrentFrame[MAXPLAYERS + 1];
-any   g_iEndStrafe_Stats[MAXPLAYERS + 1][MAX_FRAMES][7];
+ArrayList g_aEndStrafeStats[MAXPLAYERS + 1];
 int   g_iEndStrafe_LastRecordedTick[MAXPLAYERS + 1];
-bool  g_bEndStrafe_IsRecorded[MAXPLAYERS + 1][MAX_FRAMES];
 int   g_iEndStrafe_PerfCount[MAXPLAYERS + 1];
 int   g_iKeySwitch_CurrentFrame[MAXPLAYERS + 1][2];
-any   g_iKeySwitch_Stats[MAXPLAYERS + 1][MAX_FRAMES_KEYSWITCH][3][2];
-bool  g_bKeySwitch_IsRecorded[MAXPLAYERS + 1][MAX_FRAMES_KEYSWITCH][2];
+ArrayList g_aKeySwitchStats[MAXPLAYERS + 1][2];
+//any   g_iKeySwitch_Stats[MAXPLAYERS + 1][MAX_FRAMES_KEYSWITCH][3][2];
+//bool  g_bKeySwitch_IsRecorded[MAXPLAYERS + 1][MAX_FRAMES_KEYSWITCH][2];
 int   g_iKeySwitch_LastRecordedTick[MAXPLAYERS + 1][2];
-bool  g_iIllegalTurn[MAXPLAYERS + 1][MAX_FRAMES];
+ArrayList g_aIllegalTurn[MAXPLAYERS + 1];
 int   g_iIllegalTurn_CurrentFrame[MAXPLAYERS + 1];
-bool  g_iIllegalTurn_IsTiming[MAXPLAYERS + 1][MAX_FRAMES];
 int   g_iLastIllegalReason[MAXPLAYERS + 1];
 int   g_iIllegalSidemoveCount[MAXPLAYERS + 1];
 int   g_iLastIllegalSidemoveCount[MAXPLAYERS + 1];
@@ -437,7 +460,7 @@ void SaveOldLogs()
 }
 
 public void PrintToDiscord(int client, const char[] log, any ...)
-{
+{	
 	if(g_bDiscordLoaded)
 	{
 		char clientName[32];
@@ -561,6 +584,8 @@ public void OnMapStart()
 	GetConVarString(g_hWebhook, g_sWebhook, 255);
 	CreateTimer(0.2, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 	
+	g_iMaxFrames = RoundFloat(1.0 / GetTickInterval()) / 2;
+	
 	if(g_bLateLoad)
 	{
 		for(int iclient = 1; iclient <= MaxClients; iclient++)
@@ -604,19 +629,22 @@ public void OnClientPutInServer(int client)
 {
 	if(IsFakeClient(client))
 		return;
-		
-	for(int idx; idx < MAX_FRAMES; idx++)
-	{
-		g_bStartStrafe_IsRecorded[client][idx]         = false;
-		g_bEndStrafe_IsRecorded[client][idx]           = false;
-	}
 	
-	for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
-	{
-		g_bKeySwitch_IsRecorded[client][idx][BT_Key]   = false;
-		g_bKeySwitch_IsRecorded[client][idx][BT_Move]  = false;
-	}
+	delete g_aStartStrafeStats[client];
+	g_aStartStrafeStats[client] = new ArrayList(sizeof(strafedata_t));
 	
+	delete g_aEndStrafeStats[client];
+	g_aEndStrafeStats[client] = new ArrayList(sizeof(strafedata_t));
+
+	for(int i = 0; i < 2; i++)
+	{
+		delete g_aKeySwitchStats[client][i];
+		g_aKeySwitchStats[client][i] = new ArrayList(sizeof(keyswitchdata_t));
+	}
+
+	delete g_aIllegalTurn[client];
+	g_aIllegalTurn[client] = new ArrayList(sizeof(turningdata_t));
+
 	g_iStartStrafe_CurrentFrame[client]        = 0;
 	g_iEndStrafe_CurrentFrame[client]          = 0;
 	g_iKeySwitch_CurrentFrame[client][BT_Key]  = 0;
@@ -1140,15 +1168,17 @@ void ShowBashStats_StartStrafes(int client)
 		return;
 	}
 	
-	int array[MAX_FRAMES];
+	int[] array = new int[g_iMaxFrames];
 	int buttons[4];
 	int size;
-	for(int idx; idx < MAX_FRAMES; idx++)
+	strafedata_t data;
+	for(int idx; idx < g_iMaxFrames; idx++)
 	{
-		if(g_bStartStrafe_IsRecorded[target][idx] == true)
+		g_aStartStrafeStats[client].GetArray(idx, data, sizeof(data));
+		if(data.is_recorded == true)
 		{
-			array[idx] = g_iStartStrafe_Stats[target][idx][StrafeData_Difference];
-			buttons[g_iStartStrafe_Stats[target][idx][StrafeData_Button]]++;
+			array[idx] = data.difference;
+			buttons[data.buttons]++;
 			size++;
 		}
 	}
@@ -1210,15 +1240,17 @@ void ShowBashStats_EndStrafes(int client)
 		return;
 	}
 	
-	int array[MAX_FRAMES];
+	int[] array = new int[g_iMaxFrames];
 	int buttons[4];
 	int size;
-	for(int idx; idx < MAX_FRAMES; idx++)
+	strafedata_t data;
+	for(int idx; idx < g_iMaxFrames; idx++)
 	{
-		if(g_bEndStrafe_IsRecorded[target][idx] == true)
+		g_aEndStrafeStats[client].GetArray(idx, data, sizeof(data));
+		if(data.is_recorded == true)
 		{
-			array[idx] = g_iEndStrafe_Stats[target][idx][StrafeData_Difference];
-			buttons[g_iEndStrafe_Stats[target][idx][StrafeData_Button]]++;
+			array[idx] = data.difference;
+			buttons[data.buttons]++;
 			size++;
 		}
 	}
@@ -1326,13 +1358,15 @@ void ShowBashStats_KeySwitches_Move(int client)
 		return;
 	}
 	
-	int array[MAX_FRAMES_KEYSWITCH];
+	int[] array = new int[g_iMaxFrames];
 	int size;
-	for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
+	keyswitchdata_t data;
+	for(int idx; idx < g_iMaxFrames; idx++)
 	{
-		if(g_bKeySwitch_IsRecorded[target][idx][BT_Move] == true)
+		g_aKeySwitchStats[client][BT_Move].GetArray(idx, data, sizeof(data));
+		if(data.is_recorded == true)
 		{
-			array[idx] = g_iKeySwitch_Stats[target][idx][KeySwitchData_Difference][BT_Move];
+			array[idx] = data.difference;
 			size++;
 		}
 	}
@@ -1367,16 +1401,18 @@ void ShowBashStats_KeySwitches_Keys(int client)
 		return;
 	}
 	
-	int array[MAX_FRAMES_KEYSWITCH];
+	int[] array = new int[g_iMaxFrames];
 	int size, positiveCount;
-	for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
+	keyswitchdata_t data;
+	for(int idx; idx < g_iMaxFrames; idx++)
 	{
-		if(g_bKeySwitch_IsRecorded[target][idx][BT_Key] == true)
+		g_aKeySwitchStats[target][BT_Key].GetArray(idx, data, sizeof(data));
+		if(data.is_recorded == true)
 		{
-			array[idx] = g_iKeySwitch_Stats[target][idx][KeySwitchData_Difference][BT_Key];
+			array[idx] = data.difference;
 			size++;
 			
-			if(g_iKeySwitch_Stats[target][idx][KeySwitchData_Difference][BT_Key] >= 0)
+			if(data.difference >= 0)
 			{
 				positiveCount++;
 			}
@@ -1758,49 +1794,60 @@ void CheckForIllegalTurning(int client, float vel[3])
 
 void CheckForWOnlyHack(int client)
 {	
+	turningdata_t turning_data;
 	if(FloatAbs(g_fAngleDifference[client][1] - g_fLastAngleDifference[client][1]) > 13 && // Player turned more than 13 degrees in 1 tick
 	g_fAngleDifference[client][1] != 0.0 && 
 	((g_iCmdNum[client] - g_iLastTeleportTick[client]) > 200// && 
 	//g_iButtons[client][BT_Move] & (1 << GetOppositeButton(GetDesiredButton(client, g_iLastTurnDir[client])))// &&
 	))
 	{
-		g_iIllegalTurn[client][g_iIllegalTurn_CurrentFrame[client]] = true;
+		turning_data.is_illegal = true;
 		//PrintToAdmins("%N: %.1f", client, FloatAbs(g_fAngleDifference[client] - g_fLastAngleDifference[client]));
 	}
 	else
 	{
-		g_iIllegalTurn[client][g_iIllegalTurn_CurrentFrame[client]] = false;
+		turning_data.is_illegal = false;
 		//char sTurn[32];
 		//GetTurnDirectionName(g_iLastTurnDir[client], sTurn, sizeof(sTurn));
 		//PrintToAdmins("No: Diff: %.1f, Btn: %d, Gain: %.1f", FloatAbs(g_fAngleDifference[client] - g_fLastAngleDifference[client]), g_iButtons[client][BT_Move] & (1 << GetOppositeButton(GetDesiredButton(client, g_iLastTurnDir[client]))), GetGainPercent(client));
 	}
 	
-	#if defined TIMER
+
 	
-	g_iIllegalTurn_IsTiming[client][g_iIllegalTurn_CurrentFrame[client]] = g_bIsBeingTimed[client];
+	#if defined TIMER
+	turning_data.is_timing = g_bIsBeingTimed[client];
+	#else
+	turning_data.is_timing = false;
 	#endif
 	
-	g_iIllegalTurn_CurrentFrame[client] = (g_iIllegalTurn_CurrentFrame[client] + 1) % MAX_FRAMES;
+	if(g_aIllegalTurn[client].Length < g_iMaxFrames)
+		g_aIllegalTurn[client].Push(0);
+
+	g_aIllegalTurn[client].SetArray(g_iIllegalTurn_CurrentFrame[client], turning_data, sizeof(turning_data));
+
+	g_iIllegalTurn_CurrentFrame[client] = (g_iIllegalTurn_CurrentFrame[client] + 1) % g_iMaxFrames;
 	
 	if(g_iIllegalTurn_CurrentFrame[client] == 0)
 	{
 		int illegalCount, timingCount;
-		for(int idx; idx < MAX_FRAMES; idx++)
+		turningdata_t data;
+		for(int idx; idx < g_iMaxFrames; idx++)
 		{
-			if(g_iIllegalTurn[client][idx] == true)
+			g_aIllegalTurn[client].GetArray(idx, data, sizeof(data));
+			if(data.is_illegal == true)
 			{
 				illegalCount++;
 			}
 			
-			if(g_iIllegalTurn_IsTiming[client][idx] == true)
+			if(data.is_timing == true)
 			{
 				timingCount++;
 			}
 		}
 		
 		float illegalPct, timingPct;
-		illegalPct = float(illegalCount) / float(MAX_FRAMES);
-		timingPct  = float(timingCount) / float(MAX_FRAMES);
+		illegalPct = float(illegalCount) / float(g_iMaxFrames);
+		timingPct  = float(timingCount) / float(g_iMaxFrames);
 		if(illegalPct > 0.6)
 		{
 			
@@ -2031,18 +2078,28 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	int moveDir   = GetDirection(client);
 	int currFrame = g_iStartStrafe_CurrentFrame[client];
 	g_iStartStrafe_LastRecordedTick[client] = g_iCmdNum[client];
-	g_iStartStrafe_Stats[client][currFrame][StrafeData_Button]        = button;
-	g_iStartStrafe_Stats[client][currFrame][StrafeData_TurnDirection] = turnDir;
-	g_iStartStrafe_Stats[client][currFrame][StrafeData_MoveDirection] = moveDir;
-	g_iStartStrafe_Stats[client][currFrame][StrafeData_Difference]    = g_iLastPressTick[client][button][BT_Move] - g_iLastTurnTick[client];
-	g_iStartStrafe_Stats[client][currFrame][StrafeData_Tick]          = g_iCmdNum[client];
+
+	strafedata_t strafe_data;
+	strafe_data.buttons = button;
+	strafe_data.turn_direction = turnDir;
+	strafe_data.move_direction = moveDir;
+	strafe_data.difference = g_iLastPressTick[client][button][BT_Move] - g_iLastTurnTick[client];
+	strafe_data.tick = g_iCmdNum[client];
 	#if defined TIMER
-	g_iStartStrafe_Stats[client][currFrame][StrafeData_IsTiming]      = g_bIsBeingTimed[client];
+	strafe_data.is_timing = g_bIsBeingTimed[client];
+	#else
+	strafe_data.is_timing = false;
 	#endif
-	g_bStartStrafe_IsRecorded[client][currFrame] = true;
-	g_iStartStrafe_CurrentFrame[client] = (g_iStartStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
+	strafe_data.is_recorded = true;
+
+	if(g_aStartStrafeStats[client].Length < g_iMaxFrames)
+		g_aStartStrafeStats[client].Push(0);
 	
-	if(g_iStartStrafe_Stats[client][currFrame][StrafeData_Difference] == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
+	g_aStartStrafeStats[client].SetArray(currFrame, strafe_data);	
+
+	g_iStartStrafe_CurrentFrame[client] = (g_iStartStrafe_CurrentFrame[client] + 1) % g_iMaxFrames;
+
+	if(strafe_data.difference == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
 		g_iStartStrafe_PerfCount[client]++;
 	}
@@ -2059,16 +2116,19 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	
 	if(g_iStartStrafe_CurrentFrame[client] == 0)
 	{
-		int array[MAX_FRAMES];
+		int[] array = new int[g_iMaxFrames];
 		int size, timingCount;
-		for(int idx; idx < MAX_FRAMES; idx++)
+
+		strafedata_t data;
+		for(int idx; idx < g_iMaxFrames; idx++)
 		{
-			if(g_bStartStrafe_IsRecorded[client][idx] == true)
+			g_aStartStrafeStats[client].GetArray(idx, data, sizeof(data));
+			if(data.is_recorded == true)
 			{
-				array[idx] = g_iStartStrafe_Stats[client][idx][StrafeData_Difference];
+				array[idx] = data.difference;
 				size++;
 				
-				if(g_iStartStrafe_Stats[client][idx][StrafeData_IsTiming] == true)
+				if(data.is_timing == true)
 				{
 					timingCount++;
 				}
@@ -2085,7 +2145,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
 			#endif
-			float timingPct = float(timingCount) / float(MAX_FRAMES);
+			float timingPct = float(timingCount) / float(g_iMaxFrames);
 			AnticheatLog(client, "start strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
 			
 			#if defined TIMER
@@ -2097,6 +2157,8 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 				AutoBanPlayer(client);
 			}
 		}
+
+		g_aStartStrafeStats[client].Clear();
 	}
 	
 	//char sOutput[128], sButton[16], sTurn[16], sMove[16];
@@ -2118,13 +2180,12 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	g_iEndStrafe_LastRecordedTick[client] = g_iCmdNum[client];
 	int moveDir = GetDirection(client);
 	int currFrame = g_iEndStrafe_CurrentFrame[client];
-	g_iEndStrafe_Stats[client][currFrame][StrafeData_Button]        = button;
-	g_iEndStrafe_Stats[client][currFrame][StrafeData_TurnDirection] = turnDir;
-	g_iEndStrafe_Stats[client][currFrame][StrafeData_MoveDirection] = moveDir;
-	#if defined TIMER
-	g_iEndStrafe_Stats[client][currFrame][StrafeData_IsTiming]      = g_bIsBeingTimed[client];
-	#endif
-	
+
+	strafedata_t strafe_data;
+	strafe_data.buttons = button;
+	strafe_data.turn_direction = turnDir;
+	strafe_data.move_direction = moveDir;
+
 	int difference = g_iLastReleaseTick[client][button][BT_Move] - g_iLastStopTurnTick[client];
 	g_iLastTurnTick_Recorded_EndStrafe[client] = g_iLastStopTurnTick[client];
 	
@@ -2133,12 +2194,24 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 		difference = g_iLastReleaseTick[client][button][BT_Move] - g_iLastTurnTick[client];
 		g_iLastTurnTick_Recorded_EndStrafe[client] = g_iLastTurnTick[client];
 	}
-	g_iEndStrafe_Stats[client][currFrame][StrafeData_Difference] = difference;
-	g_bEndStrafe_IsRecorded[client][currFrame]                   = true;
-	g_iEndStrafe_Stats[client][currFrame][StrafeData_Tick]       = g_iCmdNum[client];
-	g_iEndStrafe_CurrentFrame[client] = (g_iEndStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
+
+	strafe_data.difference = difference;
+	strafe_data.tick = g_iCmdNum[client];
+	#if defined TIMER
+	strafe_data.is_timing = g_bIsBeingTimed[client];
+	#else
+	strafe_data.is_timing = false;
+	#endif
+	strafe_data.is_recorded = true;
+
+	if(g_aEndStrafeStats[client].Length < g_iMaxFrames)
+		g_aEndStrafeStats[client].Push(0);
 	
-	if(g_iEndStrafe_Stats[client][currFrame][StrafeData_Difference] == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
+	g_aEndStrafeStats[client].SetArray(currFrame, strafe_data);	
+
+	g_iEndStrafe_CurrentFrame[client] = (g_iEndStrafe_CurrentFrame[client] + 1) % g_iMaxFrames;
+	
+	if(strafe_data.difference == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
 		g_iEndStrafe_PerfCount[client]++;
 	}
@@ -2155,16 +2228,18 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	
 	if(g_iEndStrafe_CurrentFrame[client] == 0)
 	{
-		int array[MAX_FRAMES];
+		int[] array = new int[g_iMaxFrames];
 		int size, timingCount;
-		for(int idx; idx < MAX_FRAMES; idx++)
+		strafedata_t data;
+		for(int idx; idx < g_iMaxFrames; idx++)
 		{
-			if(g_bEndStrafe_IsRecorded[client][idx] == true)
+			g_aEndStrafeStats[client].GetArray(idx, data, sizeof(data));
+			if(data.is_recorded == true)
 			{
-				array[idx] = g_iEndStrafe_Stats[client][idx][StrafeData_Difference];
+				array[idx] = data.difference;
 				size++;
 				
-				if(g_iEndStrafe_Stats[client][idx][StrafeData_IsTiming] == true)
+				if(data.is_timing == true)
 				{
 					timingCount++;
 				}
@@ -2181,7 +2256,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 			Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
 			#endif
-			float timingPct = float(timingCount) / float(MAX_FRAMES);
+			float timingPct = float(timingCount) / float(g_iMaxFrames);
 			AnticheatLog(client, "end strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
 			
 			#if defined TIMER
@@ -2193,6 +2268,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 				AutoBanPlayer(client);
 			}
 		}
+		g_aEndStrafeStats[client].Clear();
 	}
 	/*
 	char sButton[16], sTurn[16], sMove[16];
@@ -2217,44 +2293,58 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype, const char[] caller)
 {
 	// Record the data
+	keyswitchdata_t keyswitch_data;
 	int currFrame = g_iKeySwitch_CurrentFrame[client][btype];
-	g_iKeySwitch_Stats[client][currFrame][KeySwitchData_Button][btype]      = button;
-	g_iKeySwitch_Stats[client][currFrame][KeySwitchData_Difference][btype]  = g_iLastPressTick[client][button][btype] - g_iLastReleaseTick[client][oppositeButton][btype];
+
+	keyswitch_data.buttons = button;
+	keyswitch_data.difference = g_iLastPressTick[client][button][btype] - g_iLastReleaseTick[client][oppositeButton][btype];
 	#if defined TIMER
-	g_iKeySwitch_Stats[client][currFrame][KeySwitchData_IsTiming][btype]    = g_bIsBeingTimed[client];
+	keyswitch_data.is_timing = g_bIsBeingTimed[client];
+	#else
+	keyswitch_data.is_timing = false;
 	#endif
-	g_bKeySwitch_IsRecorded[client][currFrame][btype]                       = true;
+	keyswitch_data.is_recorded = true;
+
+	if(g_aKeySwitchStats[client][btype].Length < g_iMaxFrames)
+		g_aKeySwitchStats[client][btype].Push(0);
+
+	g_aKeySwitchStats[client][btype].SetArray(currFrame, keyswitch_data, sizeof(keyswitch_data));
+
 	g_iKeySwitch_LastRecordedTick[client][btype]                            = g_iCmdNum[client];
-	g_iKeySwitch_CurrentFrame[client][btype]                                = (g_iKeySwitch_CurrentFrame[client][btype] + 1) % MAX_FRAMES_KEYSWITCH;
+	g_iKeySwitch_CurrentFrame[client][btype]                                = (g_iKeySwitch_CurrentFrame[client][btype] + 1) % g_iMaxFrames;
 	g_iLastPressTick_Recorded_KS[client][button][btype]                     = g_iLastPressTick[client][button][btype];
 	g_iLastReleaseTick_Recorded_KS[client][oppositeButton][btype]           = g_iLastReleaseTick[client][oppositeButton][btype];
 	
 	// After we have a new set of data, check to see if they are cheating
 	if(g_iKeySwitch_CurrentFrame[client][btype] == 0)
 	{
-		int array[MAX_FRAMES_KEYSWITCH];
+		int[] array = new int[g_iMaxFrames];
 		int size, positiveCount, timingCount, nullCount;
-		for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
+		keyswitchdata_t data;
+		for(int idx; idx < g_iMaxFrames; idx++)
 		{
-			if(g_bKeySwitch_IsRecorded[client][idx][btype] == true)
+			g_aKeySwitchStats[client][btype].GetArray(idx, data, sizeof(data));
+			if(data.is_recorded == true)
 			{
-				array[idx] = g_iKeySwitch_Stats[client][idx][KeySwitchData_Difference][btype];
+				array[idx] = data.difference;
 				size++;
 				
+				keyswitchdata_t key_data;
+				g_aKeySwitchStats[client][BT_Key].GetArray(idx, key_data, sizeof(key_data));
 				if(btype == BT_Key)
 				{
-					if(g_iKeySwitch_Stats[client][idx][KeySwitchData_Difference][BT_Key] >= 0)
+					if(key_data.difference >= 0)
 					{
 						positiveCount++;
 					}
 				}
 				
-				if(g_iKeySwitch_Stats[client][idx][KeySwitchData_Difference][BT_Key] == 0)
+				if(key_data.difference == 0)
 				{
 					nullCount++;
 				}
 				
-				if(g_iKeySwitch_Stats[client][idx][KeySwitchData_IsTiming][btype] == true)
+				if(data.is_timing == true)
 				{
 					timingCount++;
 				}
@@ -2263,20 +2353,20 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 		
 		float mean = GetAverage(array, size);
 		float sd   = StandardDeviation(array, size, mean);
-		float nullPct = float(nullCount) / float(MAX_FRAMES_KEYSWITCH);
+		float nullPct = float(nullCount) / float(g_iMaxFrames);
 		if(sd <= 0.25 || nullPct >= 0.95)
 		{
 			if(btype == BT_Key)
 			{
-				if(positiveCount == MAX_FRAMES_KEYSWITCH)
+				if(positiveCount == g_iMaxFrames)
 				{
 					//PrintToAdmins("%N key switch positive count every frame", client);
 				}
 			}
 			
 			float timingPct, positivePct;
-			positivePct = float(positiveCount) / float(MAX_FRAMES_KEYSWITCH);
-			timingPct   = float(timingCount) / float(MAX_FRAMES_KEYSWITCH);
+			positivePct = float(positiveCount) / float(g_iMaxFrames);
+			timingPct   = float(timingCount) / float(g_iMaxFrames);
 			
 			
 			#if defined TIMER
