@@ -391,7 +391,6 @@ void AutoBanPlayer(int client)
 	{
 		ServerCommand("sm_ban #%d %s Cheating", GetClientUserId(client), g_sBanLength);
 		PrintToDiscord(client, "Banned for cheating.");
-		
 	}
 }
 
@@ -488,6 +487,7 @@ public void PrintToDiscord(int client, const char[] log, any ...)
 		
 		hook.Send();
 		delete hook;
+	}
 }
 
 stock bool AnticheatLog(int client, const char[] log, any ...)
@@ -1167,13 +1167,13 @@ void ShowBashStats_StartStrafes(int client)
 		return;
 	}
 	
-	int[] array = new int[g_iMaxFrames];
+	int[] array = new int[g_aStartStrafeStats[target].Length];
 	int buttons[4];
 	int size;
 	strafedata_t data;
-	for(int idx; idx < g_iMaxFrames; idx++)
+	for(int idx; idx < g_aStartStrafeStats[target].Length; idx++)
 	{
-		g_aStartStrafeStats[client].GetArray(idx, data, sizeof(data));
+		g_aStartStrafeStats[target].GetArray(idx, data, sizeof(data));
 		if(data.is_recorded == true)
 		{
 			array[idx] = data.difference;
@@ -1239,13 +1239,13 @@ void ShowBashStats_EndStrafes(int client)
 		return;
 	}
 	
-	int[] array = new int[g_iMaxFrames];
+	int[] array = new int[g_aEndStrafeStats[target].Length];
 	int buttons[4];
 	int size;
 	strafedata_t data;
-	for(int idx; idx < g_iMaxFrames; idx++)
+	for(int idx; idx < g_aEndStrafeStats[target].Length; idx++)
 	{
-		g_aEndStrafeStats[client].GetArray(idx, data, sizeof(data));
+		g_aEndStrafeStats[target].GetArray(idx, data, sizeof(data));
 		if(data.is_recorded == true)
 		{
 			array[idx] = data.difference;
@@ -1357,12 +1357,12 @@ void ShowBashStats_KeySwitches_Move(int client)
 		return;
 	}
 	
-	int[] array = new int[g_iMaxFrames];
+	int[] array = new int[g_aKeySwitchStats[target][BT_Move].Length];
 	int size;
 	keyswitchdata_t data;
-	for(int idx; idx < g_iMaxFrames; idx++)
+	for(int idx; idx < g_aKeySwitchStats[target][BT_Move].Length; idx++)
 	{
-		g_aKeySwitchStats[client][BT_Move].GetArray(idx, data, sizeof(data));
+		g_aKeySwitchStats[target][BT_Move].GetArray(idx, data, sizeof(data));
 		if(data.is_recorded == true)
 		{
 			array[idx] = data.difference;
@@ -1400,10 +1400,10 @@ void ShowBashStats_KeySwitches_Keys(int client)
 		return;
 	}
 	
-	int[] array = new int[g_iMaxFrames];
+	int[] array = new int[g_aKeySwitchStats[target][BT_Key].Length];
 	int size, positiveCount;
 	keyswitchdata_t data;
-	for(int idx; idx < g_iMaxFrames; idx++)
+	for(int idx; idx < g_aKeySwitchStats[target][BT_Key].Length; idx++)
 	{
 		g_aKeySwitchStats[target][BT_Key].GetArray(idx, data, sizeof(data));
 		if(data.is_recorded == true)
@@ -1811,15 +1811,13 @@ void CheckForWOnlyHack(int client)
 		//PrintToAdmins("No: Diff: %.1f, Btn: %d, Gain: %.1f", FloatAbs(g_fAngleDifference[client] - g_fLastAngleDifference[client]), g_iButtons[client][BT_Move] & (1 << GetOppositeButton(GetDesiredButton(client, g_iLastTurnDir[client]))), GetGainPercent(client));
 	}
 	
-
-	
 	#if defined TIMER
 	turning_data.is_timing = g_bIsBeingTimed[client];
 	#else
 	turning_data.is_timing = false;
 	#endif
 	
-	if(g_aIllegalTurn[client].Length < g_iMaxFrames)
+	if(g_aIllegalTurn[client].Length <= g_iMaxFrames)
 		g_aIllegalTurn[client].Push(0);
 
 	g_aIllegalTurn[client].SetArray(g_iIllegalTurn_CurrentFrame[client], turning_data, sizeof(turning_data));
@@ -1830,7 +1828,7 @@ void CheckForWOnlyHack(int client)
 	{
 		int illegalCount, timingCount;
 		turningdata_t data;
-		for(int idx; idx < g_iMaxFrames; idx++)
+		for(int idx; idx < g_aIllegalTurn[client].Length; idx++)
 		{
 			g_aIllegalTurn[client].GetArray(idx, data, sizeof(data));
 			if(data.is_illegal == true)
@@ -1845,9 +1843,9 @@ void CheckForWOnlyHack(int client)
 		}
 		
 		float illegalPct, timingPct;
-		illegalPct = float(illegalCount) / float(g_iMaxFrames);
-		timingPct  = float(timingCount) / float(g_iMaxFrames);
-		if(illegalPct > 0.6)
+		illegalPct = float(illegalCount) / float(g_aIllegalTurn[client].Length);
+		timingPct  = float(timingCount) / float(g_aIllegalTurn[client].Length);
+		if(illegalPct > 0.6 * ((1.0 / GetTickInterval()) / 100))
 		{
 			
 			#if defined TIMER
@@ -1897,7 +1895,7 @@ void ClientPressedKey(int client, int button, int btype)
 		g_iLastTurnTick[client] != g_iLastTurnTick_Recorded_StartStrafe[client])
 		{
 			int difference = g_iLastTurnTick[client] - g_iLastPressTick[client][button][BT_Move];
-		
+
 			if(-15 <= difference <= 15)
 			{
 				RecordStartStrafe(client, button, turnDir, "ClientPressedKey");
@@ -1960,7 +1958,7 @@ void ClientReleasedKey(int client, int button, int btype)
 		g_iLastTurnTick_Recorded_EndStrafe[client] != g_iLastTurnTick[client])
 		{
 			int difference = g_iLastTurnTick[client] - g_iLastReleaseTick[client][button][BT_Move];
-		
+
 			if(-15 <= difference <= 15)
 			{
 				RecordEndStrafe(client, button, turnDir, "ClientReleasedKey");
@@ -2024,7 +2022,7 @@ void ClientTurned(int client, int turnDir)
 		g_iLastTurnTick_Recorded_EndStrafe[client] != g_iLastTurnTick[client])
 	{
 		int difference = g_iLastTurnTick[client] - g_iLastReleaseTick[client][oppositeButton][BT_Move];
-	
+
 		if(-15 <= difference <= 15)
 		{
 			RecordEndStrafe(client, oppositeButton, turnDir, "ClientTurned");
@@ -2038,7 +2036,7 @@ void ClientTurned(int client, int turnDir)
 	g_iLastTurnTick_Recorded_StartStrafe[client] != g_iLastTurnTick[client])
 	{
 		int difference = g_iLastTurnTick[client] - g_iLastPressTick[client][button][BT_Move];
-	
+
 		if(-15 <= difference <= 15)
 		{
 			RecordStartStrafe(client, button, turnDir, "ClientTurned");
@@ -2061,9 +2059,9 @@ void ClientStoppedTurning(int client)
 		g_iLastTurnTick_Recorded_EndStrafe[client] != g_iLastStopTurnTick[client])
 	{
 		int difference = g_iLastStopTurnTick[client] - g_iLastReleaseTick[client][button][BT_Move];
-	
+
 		if(-15 <= difference <= 15)
-		{
+		{		
 			RecordEndStrafe(client, button, turnDir, "ClientStoppedTurning");
 		}
 	}
@@ -2091,7 +2089,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	#endif
 	strafe_data.is_recorded = true;
 
-	if(g_aStartStrafeStats[client].Length < g_iMaxFrames)
+	if(g_aStartStrafeStats[client].Length <= g_iMaxFrames)
 		g_aStartStrafeStats[client].Push(0);
 	
 	g_aStartStrafeStats[client].SetArray(currFrame, strafe_data);	
@@ -2135,8 +2133,8 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 		}
 		float mean = GetAverage(array, size);
 		float sd   = StandardDeviation(array, size, mean);
-		
-		if(sd < 0.8)
+
+		if(sd < 0.8 * ((1.0 / GetTickInterval()) / 100))
 		{
 			char sStyle[32];
 			#if defined TIMER
@@ -2145,19 +2143,17 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
 			#endif
 			float timingPct = float(timingCount) / float(g_iMaxFrames);
-			AnticheatLog(client, "start strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
+			AnticheatLog(client, "start strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s, tickrate: %.2f", mean, sd, timingPct * 100, sStyle, 1.0/GetTickInterval());
 			
 			#if defined TIMER
-			if(sd <= 0.4 && timingPct == 1.0)
+			if(sd <= 0.4 * ((1.0 / GetTickInterval()) / 100) && timingPct == 1.0)
 			#else
-			if(sd <= 0.4)
+			if(sd <= 0.4 * ((1.0 / GetTickInterval()) / 100))
 			#endif
 			{
 				AutoBanPlayer(client);
 			}
 		}
-
-		g_aStartStrafeStats[client].Clear();
 	}
 	
 	//char sOutput[128], sButton[16], sTurn[16], sMove[16];
@@ -2246,8 +2242,8 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 		}
 		float mean = GetAverage(array, size);
 		float sd   = StandardDeviation(array, size, mean);
-		
-		if(sd < 0.8)
+
+		if(sd < 0.8 * ((1.0 / GetTickInterval()) / 100))
 		{
 			char sStyle[32];
 			#if defined TIMER
@@ -2256,18 +2252,17 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
 			#endif
 			float timingPct = float(timingCount) / float(g_iMaxFrames);
-			AnticheatLog(client, "end strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
+			AnticheatLog(client, "end strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s, tickrate: %.2f", mean, sd, timingPct * 100, sStyle, 1.0/GetTickInterval());
 			
 			#if defined TIMER
-			if(sd <= 0.4 && timingPct == 1.0)
+			if(sd <= 0.4 * ((1.0 / GetTickInterval()) / 100) && timingPct == 1.0)
 			#else
-			if(sd <= 0.4)
+			if(sd <= 0.4 * ((1.0 / GetTickInterval()) / 100))
 			#endif
 			{
 				AutoBanPlayer(client);
 			}
 		}
-		g_aEndStrafeStats[client].Clear();
 	}
 	/*
 	char sButton[16], sTurn[16], sMove[16];
@@ -2304,7 +2299,7 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 	#endif
 	keyswitch_data.is_recorded = true;
 
-	if(g_aKeySwitchStats[client][btype].Length < g_iMaxFrames)
+	if(g_aKeySwitchStats[client][btype].Length <= g_iMaxFrames)
 		g_aKeySwitchStats[client][btype].Push(0);
 
 	g_aKeySwitchStats[client][btype].SetArray(currFrame, keyswitch_data, sizeof(keyswitch_data));
@@ -2317,10 +2312,10 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 	// After we have a new set of data, check to see if they are cheating
 	if(g_iKeySwitch_CurrentFrame[client][btype] == 0)
 	{
-		int[] array = new int[g_iMaxFrames];
+		int[] array = new int[g_aKeySwitchStats[client][btype].Length];
 		int size, positiveCount, timingCount, nullCount;
 		keyswitchdata_t data;
-		for(int idx; idx < g_iMaxFrames; idx++)
+		for(int idx; idx < g_aKeySwitchStats[client][btype].Length; idx++)
 		{
 			g_aKeySwitchStats[client][btype].GetArray(idx, data, sizeof(data));
 			if(data.is_recorded == true)
@@ -2385,11 +2380,6 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
 				CreateTimer(10.0, Timer_NullKick, GetClientUserId(client));
 			}
-		}
-
-		for(int i = 0; i < 2; i++)
-		{
-			g_aKeySwitchStats[client][i].Clear();
 		}
 	}
 }
