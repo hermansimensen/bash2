@@ -621,8 +621,13 @@ public void OnClientPutInServer(int client)
 	
 	SDKHook(client, SDKHook_Touch, Hook_OnTouch);
 	
+	if(g_bDhooksLoaded)
+	{
+		DHookEntity(g_hTeleport, false, client);
+	}
+
 	#if defined TIMER
-	if(g_bSendProxyLoaded == true)
+	if(g_bSendProxyLoaded)
 	{
 		SendProxy_Hook(client, "m_fFlags", Prop_Int, Hook_GroundFlags);
 	}
