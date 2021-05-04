@@ -633,44 +633,42 @@ public void OnClientPutInServer(int client)
 	}
 	#endif
 	
-	if(!IsFakeClient(client))
-	{
-		g_iYawSpeed[client] = 210.0;
-		g_mYaw[client] = 0.0;
-		g_mYawChangedCount[client] = 0;
-		g_mYawCheckedCount[client] = 0;
-		g_mFilter[client] = false;
-		g_mFilterChangedCount[client] = 0;
-		g_mFilterCheckedCount[client] = 0;
-		g_mRawInput[client] = true;
-		g_mRawInputChangedCount[client] = 0;
-		g_mRawInputCheckedCount[client] = 0;
-		g_mCustomAccel[client] = 0;
-		g_mCustomAccelChangedCount[client] = 0;
-		g_mCustomAccelCheckedCount[client] = 0;
-		g_mCustomAccelMax[client] = 0.0;
-		g_mCustomAccelMaxChangedCount[client] = 0;
-		g_mCustomAccelMaxCheckedCount[client] = 0;
-		g_mCustomAccelScale[client] = 0.0;
-		g_mCustomAccelScaleChangedCount[client] = 0;
-		g_mCustomAccelScaleCheckedCount[client] = 0;
-		g_mCustomAccelExponent[client] = 0.0;
-		g_mCustomAccelExponentChangedCount[client] = 0;
-		g_mCustomAccelExponentCheckedCount[client] = 0;
-		g_Sensitivity[client] = 0.0;
-		g_SensitivityChangedCount[client] = 0;
-		g_SensitivityCheckedCount[client] = 0;
-		g_JoySensitivity[client] = 0.0;
-		g_JoySensitivityChangedCount[client] = 0;
-		g_JoySensitivityCheckedCount[client] = 0;
-		g_ZoomSensitivity[client] = 0.0;
-		g_ZoomSensitivityChangedCount[client] = 0;
-		g_ZoomSensitivityCheckedCount[client] = 0;
-		
-		QueryForCvars(client);
-		
-		g_iLastInvalidButtonCount[client] = 0;
-	}
+
+	g_iYawSpeed[client] = 210.0;
+	g_mYaw[client] = 0.0;
+	g_mYawChangedCount[client] = 0;
+	g_mYawCheckedCount[client] = 0;
+	g_mFilter[client] = false;
+	g_mFilterChangedCount[client] = 0;
+	g_mFilterCheckedCount[client] = 0;
+	g_mRawInput[client] = true;
+	g_mRawInputChangedCount[client] = 0;
+	g_mRawInputCheckedCount[client] = 0;
+	g_mCustomAccel[client] = 0;
+	g_mCustomAccelChangedCount[client] = 0;
+	g_mCustomAccelCheckedCount[client] = 0;
+	g_mCustomAccelMax[client] = 0.0;
+	g_mCustomAccelMaxChangedCount[client] = 0;
+	g_mCustomAccelMaxCheckedCount[client] = 0;
+	g_mCustomAccelScale[client] = 0.0;
+	g_mCustomAccelScaleChangedCount[client] = 0;
+	g_mCustomAccelScaleCheckedCount[client] = 0;
+	g_mCustomAccelExponent[client] = 0.0;
+	g_mCustomAccelExponentChangedCount[client] = 0;
+	g_mCustomAccelExponentCheckedCount[client] = 0;
+	g_Sensitivity[client] = 0.0;
+	g_SensitivityChangedCount[client] = 0;
+	g_SensitivityCheckedCount[client] = 0;
+	g_JoySensitivity[client] = 0.0;
+	g_JoySensitivityChangedCount[client] = 0;
+	g_JoySensitivityCheckedCount[client] = 0;
+	g_ZoomSensitivity[client] = 0.0;
+	g_ZoomSensitivityChangedCount[client] = 0;
+	g_ZoomSensitivityCheckedCount[client] = 0;
+	
+	QueryForCvars(client);
+	
+	g_iLastInvalidButtonCount[client] = 0;
 }
 
 public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, int element)
