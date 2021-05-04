@@ -275,7 +275,7 @@ public void OnLibraryAdded(const char[] name)
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
 	{
-		g_bSendProxyLoaded = false;
+		g_bSendProxyLoaded = true;
 	}
 	#endif
 }
