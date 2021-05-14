@@ -4,7 +4,6 @@
 #include <sdktools>
 #include <cstrike>
 #include <sdkhooks>
-#include <smlib/entities>
 
 #if defined TIMER
 #include <shavit>
@@ -277,7 +276,7 @@ public void OnLibraryAdded(const char[] name)
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
 	{
-		g_bSendProxyLoaded = false;
+		g_bSendProxyLoaded = true;
 	}
 	#endif
 }
@@ -622,51 +621,54 @@ public void OnClientPutInServer(int client)
 	
 	SDKHook(client, SDKHook_Touch, Hook_OnTouch);
 	
+	if(g_bDhooksLoaded)
+	{
+		DHookEntity(g_hTeleport, false, client);
+	}
+
 	#if defined TIMER
-	if(g_bSendProxyLoaded == true)
+	if(g_bSendProxyLoaded)
 	{
 		SendProxy_Hook(client, "m_fFlags", Prop_Int, Hook_GroundFlags);
 	}
 	#endif
 	
-	if(!IsFakeClient(client))
-	{
-		g_iYawSpeed[client] = 210.0;
-		g_mYaw[client] = 0.0;
-		g_mYawChangedCount[client] = 0;
-		g_mYawCheckedCount[client] = 0;
-		g_mFilter[client] = false;
-		g_mFilterChangedCount[client] = 0;
-		g_mFilterCheckedCount[client] = 0;
-		g_mRawInput[client] = true;
-		g_mRawInputChangedCount[client] = 0;
-		g_mRawInputCheckedCount[client] = 0;
-		g_mCustomAccel[client] = 0;
-		g_mCustomAccelChangedCount[client] = 0;
-		g_mCustomAccelCheckedCount[client] = 0;
-		g_mCustomAccelMax[client] = 0.0;
-		g_mCustomAccelMaxChangedCount[client] = 0;
-		g_mCustomAccelMaxCheckedCount[client] = 0;
-		g_mCustomAccelScale[client] = 0.0;
-		g_mCustomAccelScaleChangedCount[client] = 0;
-		g_mCustomAccelScaleCheckedCount[client] = 0;
-		g_mCustomAccelExponent[client] = 0.0;
-		g_mCustomAccelExponentChangedCount[client] = 0;
-		g_mCustomAccelExponentCheckedCount[client] = 0;
-		g_Sensitivity[client] = 0.0;
-		g_SensitivityChangedCount[client] = 0;
-		g_SensitivityCheckedCount[client] = 0;
-		g_JoySensitivity[client] = 0.0;
-		g_JoySensitivityChangedCount[client] = 0;
-		g_JoySensitivityCheckedCount[client] = 0;
-		g_ZoomSensitivity[client] = 0.0;
-		g_ZoomSensitivityChangedCount[client] = 0;
-		g_ZoomSensitivityCheckedCount[client] = 0;
-		
-		QueryForCvars(client);
-		
-		g_iLastInvalidButtonCount[client] = 0;
-	}
+
+	g_iYawSpeed[client] = 210.0;
+	g_mYaw[client] = 0.0;
+	g_mYawChangedCount[client] = 0;
+	g_mYawCheckedCount[client] = 0;
+	g_mFilter[client] = false;
+	g_mFilterChangedCount[client] = 0;
+	g_mFilterCheckedCount[client] = 0;
+	g_mRawInput[client] = true;
+	g_mRawInputChangedCount[client] = 0;
+	g_mRawInputCheckedCount[client] = 0;
+	g_mCustomAccel[client] = 0;
+	g_mCustomAccelChangedCount[client] = 0;
+	g_mCustomAccelCheckedCount[client] = 0;
+	g_mCustomAccelMax[client] = 0.0;
+	g_mCustomAccelMaxChangedCount[client] = 0;
+	g_mCustomAccelMaxCheckedCount[client] = 0;
+	g_mCustomAccelScale[client] = 0.0;
+	g_mCustomAccelScaleChangedCount[client] = 0;
+	g_mCustomAccelScaleCheckedCount[client] = 0;
+	g_mCustomAccelExponent[client] = 0.0;
+	g_mCustomAccelExponentChangedCount[client] = 0;
+	g_mCustomAccelExponentCheckedCount[client] = 0;
+	g_Sensitivity[client] = 0.0;
+	g_SensitivityChangedCount[client] = 0;
+	g_SensitivityCheckedCount[client] = 0;
+	g_JoySensitivity[client] = 0.0;
+	g_JoySensitivityChangedCount[client] = 0;
+	g_JoySensitivityCheckedCount[client] = 0;
+	g_ZoomSensitivity[client] = 0.0;
+	g_ZoomSensitivityChangedCount[client] = 0;
+	g_ZoomSensitivityCheckedCount[client] = 0;
+	
+	QueryForCvars(client);
+	
+	g_iLastInvalidButtonCount[client] = 0;
 }
 
 public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, int element)
@@ -1565,7 +1567,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		g_fLastAngles[client][0] = angles[0];
 		g_fLastAngles[client][1] = angles[1];
 		g_fLastAngles[client][2] = angles[2];
-		Entity_GetAbsOrigin(client, g_fLastPosition[client]);
+		GetClientAbsOrigin(client, g_fLastPosition[client]);
 		g_fLastAngleDifference[client][0] = g_fAngleDifference[client][0];
 		g_fLastAngleDifference[client][1] = g_fAngleDifference[client][1];
 		g_iCmdNum[client]++;
@@ -1846,7 +1848,7 @@ void ClientPressedKey(int client, int button, int btype)
 void CheckForTeleport(int client)
 {
 	float vPos[3];
-	Entity_GetAbsOrigin(client, vPos);
+	GetClientAbsOrigin(client, vPos);
 			   
 	float distance = SquareRoot(Pow(vPos[0] - g_fLastPosition[client][0], 2.0) + 
 								Pow(vPos[1] - g_fLastPosition[client][1], 2.0) + 
