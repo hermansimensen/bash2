@@ -117,8 +117,6 @@ int   g_iTimingTickCount[MAXPLAYERS + 1];
 #define BHOP_TIME 15
 
 // Optimizer detection
-int g_iKeyboardSampleTime[MAXPLAYERS + 1];
-bool g_bCheckedKeyboardSampleTime[MAXPLAYERS + 1];
 bool g_bTouchesFuncRotating[MAXPLAYERS + 1];
 
 // Mouse cvars
@@ -508,10 +506,6 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 					AutoBanPlayer(iclient);
 				}
 			}
-			else if(g_iKeyboardSampleTime[iclient] == 0 && gainPct >= 70.0)
-			{
-				AnticheatLog(iclient, "has %.2f％ (Yawing %.1f％, Timing: %.1f％) gains while in_usekeyboardsampletime is set to 0", gainPct, yawPct, timingPct);
-			}
 		}
 		
 		g_iJump[iclient] = 0;
@@ -638,8 +632,6 @@ public void OnClientPutInServer(int client)
 	if(!IsFakeClient(client))
 	{
 		g_iYawSpeed[client] = 210.0;
-		g_iKeyboardSampleTime[client] = 0;
-		g_bCheckedKeyboardSampleTime[client] = false;
 		g_mYaw[client] = 0.0;
 		g_mYawChangedCount[client] = 0;
 		g_mYawCheckedCount[client] = 0;
@@ -694,7 +686,6 @@ public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, i
 void QueryForCvars(int client)
 {
 	if(g_Engine == Engine_CSS) QueryClientConVar(client, "cl_yawspeed", OnYawSpeedRetrieved);
-	QueryClientConVar(client, "in_usekeyboardsampletime", OnKSTRetrieved);
 	QueryClientConVar(client, "m_yaw", OnYawRetrieved);
 	QueryClientConVar(client, "m_filter", OnFilterRetrieved);
 	QueryClientConVar(client, "m_customaccel", OnCustomAccelRetrieved);
@@ -716,25 +707,6 @@ public void OnYawSpeedRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 	if(g_iYawSpeed[client] < 0)
 	{
 		KickClient(client, "cl_yawspeed cannot be negative");
-	}
-}
-
-public void OnKSTRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
-{
-	if(g_bCheckedKeyboardSampleTime[client] == false)
-	{
-		g_iKeyboardSampleTime[client]        = StringToInt(cvarValue);
-		g_bCheckedKeyboardSampleTime[client] = true;
-	}
-	else
-	{
-		int value = StringToInt(cvarValue);
-		if(value != g_iKeyboardSampleTime[client])
-		{
-				//AnticheatLog("%L changed their in_usekeyboardsampletime ConVar to %d", client, value);
-			PrintToAdmins("%N changed their in_usekeyboardsampletime ConVar to %d", client, value);
-			g_iKeyboardSampleTime[client] = value;
-		}
 	}
 }
 
