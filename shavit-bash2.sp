@@ -223,6 +223,7 @@ public void OnPluginStart()
 	g_Engine = GetEngineVersion();
 	RegAdminCmd("bash2_stats", Bash_Stats, ADMFLAG_RCON, "Check a player's strafe stats");
 	RegAdminCmd("bash2_admin", Bash_AdminMode, ADMFLAG_RCON, "Opt in/out of admin mode (Prints bash info into chat).");
+	RegAdminCmd("bash2_test", Bash_Test, ADMFLAG_RCON, "trigger a test message so you can know if webhooks are working :)");
 	
 	HookEvent("player_jump", Event_PlayerJump);
 	
@@ -1002,6 +1003,32 @@ public Action Bash_AdminMode(int client, int args)
 		g_bAdminMode[client] = !g_bAdminMode[client]
 		ReplyToCommand(client, "[BASH] You are now in admin mode.");
 	}
+	return Plugin_Handled;
+}
+
+public Action Bash_Test(int client, int args)
+{
+	if (client == 0)
+	{
+		for (int i = 1; i<= MaxClients; i++)
+		{
+			if (IsClientConnected(i) && IsClientInGame(i))
+			{
+				client = i;
+				break;
+			}
+		}
+	}
+
+	if (client == 0)
+	{
+		PrintToServer("No client to use for test log... :|");
+	}
+	else
+	{
+		AnticheatLog(client, "bash2_test log. plz ignore :)");
+	}
+
 	return Plugin_Handled;
 }
 
