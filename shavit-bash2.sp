@@ -113,6 +113,8 @@ int   g_iTicksOnGround[MAXPLAYERS + 1];
 float g_iYawSpeed[MAXPLAYERS + 1];
 int   g_iYawTickCount[MAXPLAYERS + 1];
 int   g_iTimingTickCount[MAXPLAYERS + 1];
+int   g_iStrafesDone[MAXPLAYERS + 1];
+bool  g_bFirstSixJumps[MAXPLAYERS + 1];
 #define BHOP_TIME 15
 
 // Optimizer detection
@@ -495,11 +497,17 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 		float yawPct = (float(g_iYawTickCount[iclient]) / float(g_strafeTick[iclient])) * 100.0;
 		float timingPct = (float(g_iTimingTickCount[iclient]) / float(g_strafeTick[iclient])) * 100.0;
 		
+		float spj;
+		if(g_bFirstSixJumps[iclient])
+			spj = g_iStrafesDone[iclient] / 5.0;
+		else
+			spj = g_iStrafesDone[iclient] / 6.0;
+		
 		if(g_strafeTick[iclient] > 300)
 		{
 			if(gainPct > 85.0 && yawPct < 60.0)
 			{
-				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％)", gainPct, yawPct, timingPct);
+				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％, SPJ: %.1f%)", gainPct, yawPct, timingPct, spj);
 				
 				if(gainPct == 100.0 && timingPct == 100.0)
 				{
@@ -513,6 +521,8 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 		g_strafeTick[iclient] = 0;
 		g_iYawTickCount[iclient] = 0;
 		g_iTimingTickCount[iclient] = 0;
+		g_iStrafesDone[iclient] = 0;
+		g_bFirstSixJumps[iclient] = false;
 	}
 }
 
@@ -1845,6 +1855,8 @@ void ClientPressedKey(int client, int button, int btype)
 	// Check if player started a strafe
 	if(btype == BT_Move)
 	{
+		g_iStrafesDone[client]++; // player pressed either w,a,s,d. update strafe count
+		
 		int turnDir = GetDesiredTurnDir(client, button, false);
 	
 		if(g_iLastTurnDir[client] == turnDir && 
@@ -2529,6 +2541,8 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 			g_flRawGain[client] = 0.0;
 			g_iYawTickCount[client] = 0;
 			g_iTimingTickCount[client] = 0;
+			g_iStrafesDone[client] = 0;
+			g_bFirstSixJumps[client] = true;
 		}
 		g_iTicksOnGround[client]++;
 	}
