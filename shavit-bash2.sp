@@ -507,7 +507,7 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 		{
 			if(gainPct > 85.0 && yawPct < 60.0)
 			{
-				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％, SPJ: %.1f%)", gainPct, yawPct, timingPct, spj);
+				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％, SPJ: %.1f)", gainPct, yawPct, timingPct, spj);
 				
 				if(gainPct == 100.0 && timingPct == 100.0)
 				{
