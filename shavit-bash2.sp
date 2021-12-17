@@ -786,6 +786,9 @@ public void OnClientConnected(int client)
 	g_ZoomSensitivityCheckedCount[client] = 0;
 	
 	g_iLastInvalidButtonCount[client] = 0;
+	
+	g_JoyStick[client] = false;
+	g_JoyStickChangedCount[client] = 0;
 }
 
 public void OnClientPostAdminCheck(int client) 
