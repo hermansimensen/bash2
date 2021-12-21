@@ -670,7 +670,7 @@ public void OnClientPutInServer(int client)
 public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, int element)
 {
 	#if defined TIMER
-	if (Shavit_GetStyleSettingFloat(Shavit_GetBhopStyle(entity), "autobhop") == false)
+	if (!Shavit_GetStyleSettingBool(Shavit_GetBhopStyle(entity), "autobhop"))
 		iValue &= ~FL_ONGROUND;
 	
 	return Plugin_Changed;
