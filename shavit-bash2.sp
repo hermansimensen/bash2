@@ -301,7 +301,9 @@ bool   g_bDiscordLoaded;
 bool   g_bSendProxyLoaded;
 #endif
 
-Handle g_fwOnLog;
+Handle g_fwdOnDetection;
+Handle g_fwdOnClientBanned;
+
 ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
@@ -349,7 +351,8 @@ public void OnPluginStart()
 	g_hPersistentData = CreateConVar("bash_persistent_data", "1", "Whether to save and reload strafe stats on a map for players when they disconnect.\nThis is useful to prevent people from frequently rejoining to wipe their strafe stats.", _, true, 0.0, true, 1.0);
 	AutoExecConfig(true, "bash", "sourcemod");
 
-	g_fwOnLog = CreateGlobalForward("Bash_OnDetection", ET_Event, Param_Cell, Param_String);
+	g_fwdOnDetection = CreateGlobalForward("Bash_OnDetection", ET_Event, Param_Cell, Param_String);
+	g_fwdOnClientBanned = CreateGlobalForward("Bash_OnClientBanned", ET_Event, Param_Cell);
 
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
 
@@ -501,6 +504,9 @@ void AutoBanPlayer(int client)
 		ServerCommand("sm_ban #%d %s Cheating", GetClientUserId(client), g_sBanLength);
 		PrintToDiscord(client, "Banned for cheating.");
 
+		Call_StartForward(g_fwdOnClientBanned);
+		Call_PushCell(client);
+		Call_Finish();
 	}
 }
 
@@ -606,7 +612,7 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
 
-	Call_StartForward(g_fwOnLog);
+	Call_StartForward(g_fwdOnDetection);
 	Call_PushCell(client);
 	Call_PushString(buffer);
 	Call_Finish();
