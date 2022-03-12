@@ -3,7 +3,7 @@
 #endif
 #define _bash_included
 
-public SharedPlugin __pl_bash = 
+public SharedPlugin __pl_bash =
 {
 	name = "shavit-bash2",
 	file = "shavit-bash2.smx",
@@ -19,6 +19,6 @@ public SharedPlugin __pl_bash =
  *
  * @param client					Client index.
  * @param buffer					Log content.
- * @noreturn						
+ * @noreturn
  */
 forward void Bash_OnDetection(int client, char[] buffer);
