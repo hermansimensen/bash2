@@ -9,13 +9,9 @@
 #include <shavit>
 #endif
 
-#undef REQUIRE_PLUGIN
-#include <discord>
-
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
 #include <sendproxy>
-
 
 #pragma newdecls required
 
@@ -296,7 +292,6 @@ bool g_bLateLoad;
 
 Handle g_hTeleport;
 bool   g_bDhooksLoaded;
-bool   g_bDiscordLoaded;
 #if defined TIMER
 bool   g_bSendProxyLoaded;
 #endif
@@ -308,12 +303,7 @@ ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
 ConVar g_hAutoban;
-ConVar g_hLogToDiscord;
-ConVar g_hWebhook;
-ConVar g_hOnlyPrintBan;
 bool g_bAdminMode[MAXPLAYERS + 1];
-char g_sHostName[128];
-char g_sWebhook[255];
 ConVar g_hQueryRate;
 ConVar g_hPersistentData;
 
@@ -344,9 +334,6 @@ public void OnPluginStart()
 	g_hAutoban = CreateConVar("bash_autoban", "1", "Auto ban players who are detected", _, true, 0.0, true, 1.0);
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
-	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
-	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", "", FCVAR_PROTECTED);
-	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
 	g_hQueryRate = CreateConVar("bash_query_rate", "0.2", "How often will convars be queried from the client?", _, true, 0.1, true, 2.0);
 	g_hPersistentData = CreateConVar("bash_persistent_data", "1", "Whether to save and reload strafe stats on a map for players when they disconnect.\nThis is useful to prevent people from frequently rejoining to wipe their strafe stats.", _, true, 0.0, true, 1.0);
 	AutoExecConfig(true, "bash", "sourcemod");
@@ -386,8 +373,6 @@ public void OnAllPluginsLoaded()
 		g_bDhooksLoaded = true;
 	}
 
-	g_bDiscordLoaded = LibraryExists("discord-api");
-
 	#if defined TIMER
 	g_bSendProxyLoaded = LibraryExists("sendproxy");
 	#endif
@@ -404,12 +389,6 @@ public void OnLibraryAdded(const char[] name)
 		Initialize();
 		g_bDhooksLoaded = true;
 	}
-
-	if(StrEqual(name, "discord-api"))
-	{
-		g_bDiscordLoaded = true;
-	}
-
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
 	{
@@ -424,17 +403,10 @@ public void OnLibraryRemoved(const char[] name)
 	{
 		//g_bTasLoaded = false;
 	}
-
 	else if(StrEqual(name, "dhooks"))
 	{
 		g_bDhooksLoaded = false;
 	}
-
-	if(StrEqual(name, "discord-api"))
-	{
-		g_bDiscordLoaded = false;
-	}
-
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
 	{
@@ -502,7 +474,6 @@ void AutoBanPlayer(int client)
 	if(g_hAutoban.BoolValue && IsClientInGame(client) && !IsClientInKickQueue(client))
 	{
 		ServerCommand("sm_ban #%d %s Cheating", GetClientUserId(client), g_sBanLength);
-		PrintToDiscord(client, "Banned for cheating.");
 
 		Call_StartForward(g_fwdOnClientBanned);
 		Call_PushCell(client);
@@ -574,38 +545,6 @@ void SaveOldLogs()
 	DeleteFile(sPath);
 }
 
-public void PrintToDiscord(int client, const char[] log, any ...)
-{
-	if(g_bDiscordLoaded)
-	{
-		char clientName[32];
-		GetClientName(client, clientName, 32);
-
-		DiscordWebHook hook = new DiscordWebHook(g_sWebhook);
-		hook.SlackMode = true;
-
-		hook.SetUsername("BASH 2.0");
-
-		MessageEmbed Embed = new MessageEmbed();
-
-		Embed.SetColor("#ff2222");
-		Embed.SetTitle(g_sHostName);
-
-		char steamid[65];
-		char playerName[512];
-		GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof(steamid));
-		Format(playerName, sizeof(playerName), "[%N](http://www.steamcommunity.com/profiles/%s)", client, steamid);
-
-		Embed.AddField("Player", playerName, true);
-		Embed.AddField("Event", log, true);
-
-		hook.Embed(Embed);
-
-		hook.Send();
-		delete hook;
-	}
-}
-
 stock bool AnticheatLog(int client, const char[] log, any ...)
 {
 	char buffer[1024];
@@ -616,10 +555,6 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	Call_PushCell(client);
 	Call_PushString(buffer);
 	Call_Finish();
-
-	if(g_hLogToDiscord.BoolValue && g_bDiscordLoaded && !g_hOnlyPrintBan.BoolValue) {
-		PrintToDiscord(client, buffer);
-	}
 
 	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp[client], buffer);
 }
@@ -665,6 +600,8 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
+	RegPluginLibrary("shavit-bash2");
+
 	g_bLateLoad = late;
 
 	return APLRes_Success;
@@ -702,8 +639,6 @@ public void OnMapStart()
 	delete g_aPersistentData;
 	g_aPersistentData = new ArrayList(sizeof(fuck_sourcemod));
 
-	GetConVarString(FindConVar("hostname"), g_sHostName, 128);
-	GetConVarString(g_hWebhook, g_sWebhook, 255);
 	CreateTimer(g_hQueryRate.FloatValue, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
 
 	if(g_bLateLoad)
@@ -2716,7 +2651,6 @@ public Action Timer_NullKick(Handle timer, int userid)
 	if(client != 1)
 	{
 		KickClient(client, "Kicked for potentional movement config");
-		PrintToDiscord(client, "Kicked for potential movement config.");
 	}
 }
 
