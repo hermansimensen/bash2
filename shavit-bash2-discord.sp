@@ -8,6 +8,7 @@
 
 ConVar gCV_Webhook;
 ConVar gCV_OnlyBans;
+ConVar gCV_UseEmbeds;
 
 public Plugin myinfo =
 {
@@ -21,7 +22,8 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	gCV_Webhook = CreateConVar("bash_discord_webhook", "", "Discord webhook.", FCVAR_PROTECTED);
-	gCV_OnlyBans = CreateConVar("bash_discord_only_bans", "0", "If enabled, only bans will be sent to Discord.", _, true, 0.0, true, 1.0);
+	gCV_OnlyBans = CreateConVar("bash_discord_only_bans", "0", "If enabled, only bans will be sent.", _, true, 0.0, true, 1.0);
+	gCV_UseEmbeds = CreateConVar("bash_discord_use_embeds", "1", "If enabled, embed messages will be sent.", _, true, 0.0, true, 1.0);
 	AutoExecConfig(true, "bash-discord", "sourcemod");
 }
 
@@ -32,15 +34,29 @@ public void Bash_OnDetection(int client, char[] buffer)
 		return;
 	}
 
-	FormatMessage(client, buffer);
+	if (gCV_UseEmbeds.BoolValue)
+	{
+		FormatEmbedMessage(client, buffer);
+	}
+	else
+	{
+		FormatMessage(client, buffer);
+	}
 }
 
 public void BASH_OnClientBanned(int client)
 {
-	FormatMessage(client, "Banned for cheating.");
+	if (gCV_UseEmbeds.BoolValue)
+	{
+		FormatEmbedMessage(client, "Banned for cheating.");
+	}
+	else
+	{
+		FormatMessage(client, "Banned for cheating.");
+	}
 }
 
-void FormatMessage(int client, char[] buffer)
+void FormatEmbedMessage(int client, char[] buffer)
 {
 	char hostname[128];
 	FindConVar("hostname").GetString(hostname, sizeof(hostname));
@@ -87,6 +103,37 @@ void FormatMessage(int client, char[] buffer)
 	delete fields;
 	delete embed;
 	delete embeds;
+	delete json;
+}
+
+void FormatMessage(int client, char[] buffer)
+{
+	char hostname[128];
+	FindConVar("hostname").GetString(hostname, sizeof(hostname));
+
+	char steamId[32];
+	GetClientAuthId(client, AuthId_SteamID64, steamId, sizeof(steamId));
+
+	char content[1024];
+	Format(content, sizeof(content), "[%N](http://www.steamcommunity.com/profiles/%s) %s", client, steamId, buffer);
+
+	// Suppress Discord mentions and embeds.
+	// https://discord.com/developers/docs/resources/channel#allowed-mentions-object
+	// https://discord.com/developers/docs/resources/channel#message-object-message-flags
+	JSONArray parse = new JSONArray();
+	JSONObject allowedMentions = new JSONObject();
+	allowedMentions.Set("parse", parse);
+
+	JSONObject json = new JSONObject();
+	json.SetString("username", hostname);
+	json.SetString("content", content);
+	json.Set("allowed_mentions", allowedMentions);
+	json.SetInt("flags", 4);
+
+	SendMessage(json);
+
+	delete parse;
+	delete allowedMentions;
 	delete json;
 }
 
