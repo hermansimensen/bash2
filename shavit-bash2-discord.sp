@@ -64,8 +64,12 @@ void FormatEmbedMessage(int client, char[] buffer)
 	char steamId[32];
 	GetClientAuthId(client, AuthId_SteamID64, steamId, sizeof(steamId));
 
+	char name[MAX_NAME_LENGTH];
+	GetClientName(client, name, sizeof(name));
+	SanitizeName(name);
+
 	char player[512];
-	Format(player, sizeof(player), "[%N](http://www.steamcommunity.com/profiles/%s)", client, steamId);
+	Format(player, sizeof(player), "[%s](http://www.steamcommunity.com/profiles/%s)", name, steamId);
 
 	// https://discord.com/developers/docs/resources/channel#embed-object
 	// https://discord.com/developers/docs/resources/channel#embed-object-embed-field-structure
@@ -114,8 +118,12 @@ void FormatMessage(int client, char[] buffer)
 	char steamId[32];
 	GetClientAuthId(client, AuthId_SteamID64, steamId, sizeof(steamId));
 
+	char name[MAX_NAME_LENGTH];
+	GetClientName(client, name, sizeof(name));
+	SanitizeName(name);
+
 	char content[1024];
-	Format(content, sizeof(content), "[%N](http://www.steamcommunity.com/profiles/%s) %s", client, steamId, buffer);
+	Format(content, sizeof(content), "[%s](http://www.steamcommunity.com/profiles/%s) %s", name, steamId, buffer);
 
 	// Suppress Discord mentions and embeds.
 	// https://discord.com/developers/docs/resources/channel#allowed-mentions-object
@@ -158,4 +166,12 @@ public void OnMessageSent(HTTPResponse response, any value, const char[] error)
 	{
 		LogError("Failed to send message to Discord. Response status: %d.", response.Status);
 	}
+}
+
+void SanitizeName(char[] name)
+{
+	ReplaceString(name, MAX_NAME_LENGTH, "(", "", false);
+	ReplaceString(name, MAX_NAME_LENGTH, ")", "", false);
+	ReplaceString(name, MAX_NAME_LENGTH, "]", "", false);
+	ReplaceString(name, MAX_NAME_LENGTH, "[", "", false);
 }
