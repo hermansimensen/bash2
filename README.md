@@ -23,8 +23,9 @@ bash_persistent_data - Saves and reload strafe stats on player rejoin.
 
 ```
 bash_discord_webhook - The url for the Discord webhook.
-bash_discord_only_bans - If enabled, only bans will be sent.
-bash_discord_use_embeds - If enabled, embed messages will be sent.
+bash_discord_only_bans - Only send ban messages and no logs.
+bash_discord_ignore_nulls - Don't send null logs.
+bash_discord_use_embeds - Send embed messages.
 ```
 
 ## Depencenies

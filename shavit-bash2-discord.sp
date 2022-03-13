@@ -8,6 +8,7 @@
 
 ConVar gCV_Webhook;
 ConVar gCV_OnlyBans;
+ConVar gCV_IgnoreNulls;
 ConVar gCV_UseEmbeds;
 
 public Plugin myinfo =
@@ -22,14 +23,20 @@ public Plugin myinfo =
 public void OnPluginStart()
 {
 	gCV_Webhook = CreateConVar("bash_discord_webhook", "", "Discord webhook.", FCVAR_PROTECTED);
-	gCV_OnlyBans = CreateConVar("bash_discord_only_bans", "0", "If enabled, only bans will be sent.", _, true, 0.0, true, 1.0);
-	gCV_UseEmbeds = CreateConVar("bash_discord_use_embeds", "1", "If enabled, embed messages will be sent.", _, true, 0.0, true, 1.0);
+	gCV_OnlyBans = CreateConVar("bash_discord_only_bans", "0", "Only send ban messages and no logs.", _, true, 0.0, true, 1.0);
+	gCV_IgnoreNulls = CreateConVar("bash_discord_ignore_nulls", "1", "Don't send null logs.", _, true, 0.0, true, 1.0);
+	gCV_UseEmbeds = CreateConVar("bash_discord_use_embeds", "1", "Send embed messages.", _, true, 0.0, true, 1.0);
 	AutoExecConfig(true, "bash-discord", "sourcemod");
 }
 
 public void Bash_OnDetection(int client, char[] buffer)
 {
 	if (gCV_OnlyBans.BoolValue)
+	{
+		return;
+	}
+
+	if (gCV_IgnoreNulls.BoolValue && StrContains(buffer, "nullPct") != -1)
 	{
 		return;
 	}
