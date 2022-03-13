@@ -18,7 +18,7 @@ forward void Bash_OnDetection(int client, char[] buffer);
  * @param client        Client index.
  * @noreturn
  */
-forward void BASH_OnClientBanned(int client);
+forward void Bash_OnClientBanned(int client);
 
 public SharedPlugin __pl_bash =
 {

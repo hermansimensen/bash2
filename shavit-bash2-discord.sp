@@ -44,7 +44,7 @@ public void Bash_OnDetection(int client, char[] buffer)
 	}
 }
 
-public void BASH_OnClientBanned(int client)
+public void Bash_OnClientBanned(int client)
 {
 	if (gCV_UseEmbeds.BoolValue)
 	{
