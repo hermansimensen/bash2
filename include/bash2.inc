@@ -3,7 +3,24 @@
 #endif
 #define _bash_included
 
-public SharedPlugin __pl_bash = 
+/**
+ * Called when BASH logs a cheat detection/indicator.
+ *
+ * @param client        Client index.
+ * @param buffer        Log content.
+ * @noreturn
+ */
+forward void Bash_OnDetection(int client, char[] buffer);
+
+/**
+ * Called when BASH bans a client.
+ *
+ * @param client        Client index.
+ * @noreturn
+ */
+forward void Bash_OnClientBanned(int client);
+
+public SharedPlugin __pl_bash =
 {
 	name = "shavit-bash2",
 	file = "shavit-bash2.smx",
@@ -13,12 +30,3 @@ public SharedPlugin __pl_bash =
 	required = 0,
 #endif
 };
-
-/**
- * Called when bash logs a cheat detection/indicator.
- *
- * @param client					Client index.
- * @param buffer					Log content.
- * @noreturn						
- */
-forward void Bash_OnDetection(int client, char[] buffer);

@@ -9,20 +9,16 @@
 #include <shavit>
 #endif
 
-#undef REQUIRE_PLUGIN
-#include <discord>
-
 #undef REQUIRE_EXTENSIONS
 #include <dhooks>
 #include <sendproxy>
-
 
 #pragma newdecls required
 
 #define BAN_LENGTH "0"
 #define PERFECT_STRAFE_MIN 15
 
-public Plugin myinfo = 
+public Plugin myinfo =
 {
 	name = "[BASH] (Blacky's Anti-Strafehack)",
 	author = "Blacky, edited by carnifex",
@@ -121,7 +117,7 @@ bool  g_bFirstSixJumps[MAXPLAYERS + 1];
 bool g_bTouchesFuncRotating[MAXPLAYERS + 1];
 
 // Mouse cvars
-float g_mYaw[MAXPLAYERS + 1]; int g_mYawChangedCount[MAXPLAYERS + 1]; int g_mYawCheckedCount[MAXPLAYERS + 1]; 
+float g_mYaw[MAXPLAYERS + 1]; int g_mYawChangedCount[MAXPLAYERS + 1]; int g_mYawCheckedCount[MAXPLAYERS + 1];
 bool  g_mFilter[MAXPLAYERS + 1]; int g_mFilterChangedCount[MAXPLAYERS + 1]; int g_mFilterCheckedCount[MAXPLAYERS + 1];
 int   g_mCustomAccel[MAXPLAYERS + 1]; int g_mCustomAccelChangedCount[MAXPLAYERS + 1]; int g_mCustomAccelCheckedCount[MAXPLAYERS + 1];
 float g_mCustomAccelMax[MAXPLAYERS + 1]; int g_mCustomAccelMaxChangedCount[MAXPLAYERS + 1]; int g_mCustomAccelMaxCheckedCount[MAXPLAYERS + 1];
@@ -296,22 +292,18 @@ bool g_bLateLoad;
 
 Handle g_hTeleport;
 bool   g_bDhooksLoaded;
-bool   g_bDiscordLoaded;
 #if defined TIMER
 bool   g_bSendProxyLoaded;
 #endif
 
-Handle g_fwOnLog;
+Handle g_fwdOnDetection;
+Handle g_fwdOnClientBanned;
+
 ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
 ConVar g_hAutoban;
-ConVar g_hLogToDiscord;
-ConVar g_hWebhook;
-ConVar g_hOnlyPrintBan;
 bool g_bAdminMode[MAXPLAYERS + 1];
-char g_sHostName[128];
-char g_sWebhook[255];
 ConVar g_hQueryRate;
 ConVar g_hPersistentData;
 
@@ -331,35 +323,33 @@ public void OnPluginStart()
 {
 	char sDate[64];
 	FormatTime(sDate, sizeof(sDate), "%y%m%d", GetTime());
-	
+
 	BuildPath(Path_SM, g_aclogfile, PLATFORM_MAX_PATH, "logs/ac_%s.txt", sDate);
 
 	UserMsg umVGUIMenu = GetUserMessageId("VGUIMenu");
 	if (umVGUIMenu == INVALID_MESSAGE_ID)
 		SetFailState("UserMsg `umVGUIMenu` not found!");
-		
+
 	g_hBanLength = CreateConVar("bash_banlength", "0", "Ban length for the automated bans", _, true, 0.0);
 	g_hAutoban = CreateConVar("bash_autoban", "1", "Auto ban players who are detected", _, true, 0.0, true, 1.0);
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
-	g_hLogToDiscord = CreateConVar("bash_discord", "0", "Print anticheat logs to discord server.", _, true, 0.0, true, 1.0);
-	g_hWebhook = CreateConVar("bash_discord_webhook", "https://discordapp.com/api/webhooks/xxxxxx", "", FCVAR_PROTECTED);
-	g_hOnlyPrintBan = CreateConVar("bash_discord_only_bans", "0", "If enabled, only kicks and bans will be printed to the discord log.", _, true, 0.0, true, 1.0);
 	g_hQueryRate = CreateConVar("bash_query_rate", "0.2", "How often will convars be queried from the client?", _, true, 0.1, true, 2.0);
 	g_hPersistentData = CreateConVar("bash_persistent_data", "1", "Whether to save and reload strafe stats on a map for players when they disconnect.\nThis is useful to prevent people from frequently rejoining to wipe their strafe stats.", _, true, 0.0, true, 1.0);
 	AutoExecConfig(true, "bash", "sourcemod");
-	
-	g_fwOnLog = CreateGlobalForward("Bash_OnDetection", ET_Event, Param_Cell, Param_String);
-	
+
+	g_fwdOnDetection = CreateGlobalForward("Bash_OnDetection", ET_Event, Param_Cell, Param_String);
+	g_fwdOnClientBanned = CreateGlobalForward("Bash_OnClientBanned", ET_Event, Param_Cell);
+
 	//HookUserMessage(umVGUIMenu, OnVGUIMenu, true);
-	
+
 	g_Engine = GetEngineVersion();
 	RegAdminCmd("bash2_stats", Bash_Stats, ADMFLAG_RCON, "Check a player's strafe stats");
 	RegAdminCmd("bash2_admin", Bash_AdminMode, ADMFLAG_RCON, "Opt in/out of admin mode (Prints bash info into chat).");
 	RegAdminCmd("bash2_test", Bash_Test, ADMFLAG_RCON, "trigger a test message so you can know if webhooks are working :)");
-	
+
 	HookEvent("player_jump", Event_PlayerJump);
-	
+
 	RequestFrame(CheckLag);
 }
 
@@ -376,15 +366,13 @@ public void OnBanLengthChanged(ConVar convar, const char[] oldValue, const char[
 public void OnAllPluginsLoaded()
 {
 	//g_bTasLoaded = LibraryExists("tas");
-	
+
 	if(g_hTeleport == INVALID_HANDLE && LibraryExists("dhooks"))
 	{
 		Initialize();
 		g_bDhooksLoaded = true;
 	}
-	
-	g_bDiscordLoaded = LibraryExists("discord-api");
-	
+
 	#if defined TIMER
 	g_bSendProxyLoaded = LibraryExists("sendproxy");
 	#endif
@@ -401,12 +389,6 @@ public void OnLibraryAdded(const char[] name)
 		Initialize();
 		g_bDhooksLoaded = true;
 	}
-	
-	if(StrEqual(name, "discord-api"))
-	{
-		g_bDiscordLoaded = true;
-	}
-	
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
 	{
@@ -421,17 +403,10 @@ public void OnLibraryRemoved(const char[] name)
 	{
 		//g_bTasLoaded = false;
 	}
-	
 	else if(StrEqual(name, "dhooks"))
 	{
 		g_bDhooksLoaded = false;
 	}
-	
-	if(StrEqual(name, "discord-api"))
-	{
-		g_bDiscordLoaded = false;
-	}
-	
 	#if defined TIMER
 	else if(StrEqual(name, "sendproxy"))
 	{
@@ -444,7 +419,7 @@ stock void PrintToAdmins(const char[] msg, any...)
 {
 	char buffer[300];
 	VFormat(buffer, sizeof(buffer), msg, 2);
-	
+
 	for (int i = 1; i <= MaxClients; i++)
 	{
 		if (CheckCommandAccess(i, "bash2_chat_log", ADMFLAG_RCON))
@@ -461,25 +436,25 @@ void Initialize()
 	Handle hGameData = LoadGameConfigFile("sdktools.games");
 	if(hGameData == INVALID_HANDLE)
 		return;
-	
+
 	int iOffset = GameConfGetOffset(hGameData, "Teleport");
-	
+
 	CloseHandle(hGameData);
-	
+
 	if(iOffset == -1)
 		return;
-	
+
 	g_hTeleport = DHookCreate(iOffset, HookType_Entity, ReturnType_Void, ThisPointer_CBaseEntity, Hook_DHooks_Teleport);
-	
+
 	if(g_hTeleport == INVALID_HANDLE){
 		PrintToServer("\n!! g_hTeleport -> INVALID_HANDLE !!\n");
 		return;
 	}
-	
+
 	DHookAddParam(g_hTeleport, HookParamType_VectorPtr);
 	DHookAddParam(g_hTeleport, HookParamType_ObjectPtr);
 	DHookAddParam(g_hTeleport, HookParamType_VectorPtr);
-	
+
 	if(g_Engine == Engine_CSGO)
 		DHookAddParam(g_hTeleport, HookParamType_Bool); // CS:GO only
 }
@@ -488,9 +463,9 @@ public MRESReturn Hook_DHooks_Teleport(int client, Handle hParams)
 {
 	if(!IsClientConnected(client) || IsFakeClient(client) || !IsPlayerAlive(client))
 		return MRES_Ignored;
-    
+
 	g_iLastTeleportTick[client] = g_iCmdNum[client];
-    
+
 	return MRES_Ignored;
 }
 
@@ -499,8 +474,10 @@ void AutoBanPlayer(int client)
 	if(g_hAutoban.BoolValue && IsClientInGame(client) && !IsClientInKickQueue(client))
 	{
 		ServerCommand("sm_ban #%d %s Cheating", GetClientUserId(client), g_sBanLength);
-		PrintToDiscord(client, "Banned for cheating.");
-		
+
+		Call_StartForward(g_fwdOnClientBanned);
+		Call_PushCell(client);
+		Call_Finish();
 	}
 }
 
@@ -513,9 +490,9 @@ public void CheckLag(any data)
 	{
 		//g_fLastLagTime = GetEngineTime();
 	}
-	
+
 	g_fLag_LastCheckTime = GetEngineTime();
-	
+
 	RequestFrame(CheckLag);
 }
 
@@ -525,34 +502,34 @@ void SaveOldLogs()
 	FormatTime(sDate, sizeof(sDate), "%y%m%d", GetTime() - (60 * 60 * 24)); // Save logs from day before to new file
 	char sPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sPath, sizeof(sPath), "logs/ac_%s.txt", sDate);
-	
+
 	if(!FileExists(sPath))
 	{
 		return;
 	}
-	
+
 	char sNewPath[PLATFORM_MAX_PATH];
 	BuildPath(Path_SM, sNewPath, sizeof(sNewPath), "logs/bash.txt");
-	
+
 	File hOld = OpenFile(sPath, "r");
 	File hNew = OpenFile(sNewPath, "a");
-	
+
 	if(hOld == INVALID_HANDLE)
 	{
 		LogError("Couldn't open '%s'", sPath);
 		return;
 	}
-	
+
 	if(hNew == INVALID_HANDLE)
 	{
 		LogError("Couldn't open '%s'", sNewPath);
 		return;
 	}
-	
+
 	char sDateFormatted[64];
 	FormatTime(sDateFormatted, sizeof(sDateFormatted), "%y-%m-%d", GetTime() - (60 * 60 * 24));
 	WriteFileLine(hNew, "\n***** ------------ Logs from %s ------------ *****", sDateFormatted);
-	
+
 	char sLine[256];
 	while(!IsEndOfFile(hOld))
 	{
@@ -562,42 +539,10 @@ void SaveOldLogs()
 			WriteFileLine(hNew, sLine);
 		}
 	}
-	
+
 	delete hOld;
 	delete hNew;
 	DeleteFile(sPath);
-}
-
-public void PrintToDiscord(int client, const char[] log, any ...)
-{
-	if(g_bDiscordLoaded)
-	{
-		char clientName[32];
-		GetClientName(client, clientName, 32);
-		
-		DiscordWebHook hook = new DiscordWebHook(g_sWebhook);
-		hook.SlackMode = true;
-		
-		hook.SetUsername("BASH 2.0");
-		
-		MessageEmbed Embed = new MessageEmbed();
-		
-		Embed.SetColor("#ff2222");
-		Embed.SetTitle(g_sHostName);
-		
-		char steamid[65];
-		char playerName[512];
-		GetClientAuthId(client, AuthId_SteamID64, steamid, sizeof(steamid));
-		Format(playerName, sizeof(playerName), "[%N](http://www.steamcommunity.com/profiles/%s)", client, steamid);
-		
-		Embed.AddField("Player", playerName, true);
-		Embed.AddField("Event", log, true);
-		
-		hook.Embed(Embed);
-		
-		hook.Send();
-		delete hook;
-	}
 }
 
 stock bool AnticheatLog(int client, const char[] log, any ...)
@@ -605,16 +550,12 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	char buffer[1024];
 	VFormat(buffer, sizeof(buffer), log, 3);
 	PrintToAdmins("%N %s", client, buffer);
-	
-	Call_StartForward(g_fwOnLog);
+
+	Call_StartForward(g_fwdOnDetection);
 	Call_PushCell(client);
 	Call_PushString(buffer);
 	Call_Finish();
-	
-	if(g_hLogToDiscord.BoolValue && g_bDiscordLoaded && !g_hOnlyPrintBan.BoolValue) {
-		PrintToDiscord(client, buffer);
-	}
-	
+
 	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp[client], buffer);
 }
 
@@ -627,26 +568,26 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 		float gainPct = GetGainPercent(iclient);
 		float yawPct = (float(g_iYawTickCount[iclient]) / float(g_strafeTick[iclient])) * 100.0;
 		float timingPct = (float(g_iTimingTickCount[iclient]) / float(g_strafeTick[iclient])) * 100.0;
-		
+
 		float spj;
 		if(g_bFirstSixJumps[iclient])
 			spj = g_iStrafesDone[iclient] / 5.0;
 		else
 			spj = g_iStrafesDone[iclient] / 6.0;
-		
+
 		if(g_strafeTick[iclient] > 300)
 		{
 			if(gainPct > 85.0 && yawPct < 60.0)
 			{
 				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％, SPJ: %.1f)", gainPct, yawPct, timingPct, spj);
-				
+
 				if(gainPct == 100.0 && timingPct == 100.0)
 				{
 					AutoBanPlayer(iclient);
 				}
 			}
 		}
-		
+
 		g_iJump[iclient] = 0;
 		g_flRawGain[iclient] = 0.0;
 		g_strafeTick[iclient] = 0;
@@ -659,15 +600,17 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 
 public APLRes AskPluginLoad2(Handle myself, bool late, char[] error, int err_max)
 {
+	RegPluginLibrary("shavit-bash2");
+
 	g_bLateLoad = late;
-	
+
 	return APLRes_Success;
 }
 
 public Action OnVGUIMenu(UserMsg msg_id, Protobuf msg, const int[] players, int playersNum, bool reliable, bool init)
 {
 	int iclient = players[0];
-	
+
 	if(g_bMOTDTest[iclient])
 	{
 		GetClientEyeAngles(iclient, g_MOTDTestAngles[iclient]);
@@ -678,7 +621,7 @@ public Action OnVGUIMenu(UserMsg msg_id, Protobuf msg, const int[] players, int 
 public Action Timer_MOTD(Handle timer, any data)
 {
 	int iclient = GetClientOfUserId(data);
-	
+
 	if(iclient != 0)
 	{
 		float vAng[3];
@@ -696,10 +639,8 @@ public void OnMapStart()
 	delete g_aPersistentData;
 	g_aPersistentData = new ArrayList(sizeof(fuck_sourcemod));
 
-	GetConVarString(FindConVar("hostname"), g_sHostName, 128);
-	GetConVarString(g_hWebhook, g_sWebhook, 255);
 	CreateTimer(g_hQueryRate.FloatValue, Timer_UpdateYaw, _, TIMER_REPEAT | TIMER_FLAG_NO_MAPCHANGE);
-	
+
 	if(g_bLateLoad)
 	{
 		for(int iclient = 1; iclient <= MaxClients; iclient++)
@@ -711,7 +652,7 @@ public void OnMapStart()
 			}
 		}
 	}
-	
+
 	SaveOldLogs();
 }
 
@@ -738,13 +679,13 @@ public void OnClientConnected(int client)
 		g_bStartStrafe_IsRecorded[client][idx]         = false;
 		g_bEndStrafe_IsRecorded[client][idx]           = false;
 	}
-	
+
 	for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
 	{
 		g_bKeySwitch_IsRecorded[client][BT_Key][idx]   = false;
 		g_bKeySwitch_IsRecorded[client][BT_Move][idx]  = false;
 	}
-	
+
 	g_iStartStrafe_CurrentFrame[client]        = 0;
 	g_iEndStrafe_CurrentFrame[client]          = 0;
 	g_iKeySwitch_CurrentFrame[client][BT_Key]  = 0;
@@ -784,14 +725,14 @@ public void OnClientConnected(int client)
 	g_ZoomSensitivity[client] = 0.0;
 	g_ZoomSensitivityChangedCount[client] = 0;
 	g_ZoomSensitivityCheckedCount[client] = 0;
-	
+
 	g_iLastInvalidButtonCount[client] = 0;
-	
+
 	g_JoyStick[client] = false;
 	g_JoyStickChangedCount[client] = 0;
 }
 
-public void OnClientPostAdminCheck(int client) 
+public void OnClientPostAdminCheck(int client)
 {
 	if (CheckCommandAccess(client, "bash2_chat_log", ADMFLAG_RCON))
 	{
@@ -930,9 +871,9 @@ public void OnClientPutInServer(int client)
 {
 	if(IsFakeClient(client))
 		return;
-	
+
 	SDKHook(client, SDKHook_Touch, Hook_OnTouch);
-	
+
 	if(g_bDhooksLoaded)
 	{
 		DHookEntity(g_hTeleport, false, client);
@@ -944,7 +885,7 @@ public void OnClientPutInServer(int client)
 		SendProxy_Hook(client, "m_fFlags", Prop_Int, Hook_GroundFlags);
 	}
 	#endif
-	
+
 	QueryForCvars(client);
 }
 
@@ -1076,10 +1017,10 @@ public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, i
 	#if defined TIMER
 	int style = Shavit_GetBhopStyle(entity);
 	bool autobhop = Shavit_GetStyleSettingBool(style, "autobhop");
-	
+
 	if(autobhop == false)
 		iValue &= ~FL_ONGROUND;
-	
+
 	return Plugin_Changed;
 	#endif
 }
@@ -1100,12 +1041,12 @@ void QueryForCvars(int client)
 	QueryClientConVar(client, "joystick", OnJoystickRetrieved);
 	if(g_Engine == Engine_CSGO) QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnZoomSensitivityRetrieved);
 	if(g_Engine == Engine_CSS) QueryClientConVar(client, "zoom_sensitivity_ratio", OnZoomSensitivityRetrieved);
-} 
+}
 
 public void OnYawSpeedRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
 	g_iYawSpeed[client] = StringToFloat(cvarValue);
-	
+
 	if(g_iYawSpeed[client] < 0)
 	{
 		KickClient(client, "cl_yawspeed cannot be negative");
@@ -1119,14 +1060,14 @@ public void OnYawRetrieved(QueryCookie cookie, int client, ConVarQueryResult res
 	{
 		g_mYaw[client] = mYaw;
 		g_mYawChangedCount[client]++;
-		
+
 		if(g_mYawChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_yaw ConVar to %.2f", client, mYaw);
 				//AnticheatLog("%L changed their m_yaw ConVar to %.2f", client, mYaw);
 		}
 	}
-	
+
 	g_mYawCheckedCount[client]++;
 }
 
@@ -1137,89 +1078,89 @@ public void OnFilterRetrieved(QueryCookie cookie, int client, ConVarQueryResult 
 	{
 		g_mFilterChangedCount[client]++;
 		g_mFilter[client] = mFilter;
-		
+
 		if(g_mFilterChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_filter ConVar to %d", client, mFilter);
 				//AnticheatLog("%L changed their m_filter ConVar to %d", client, mFilter);
 		}
 	}
-	
+
 	g_mFilterCheckedCount[client]++;
 }
 
 public void OnCustomAccelRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
 	int mCustomAccel = StringToInt(cvarValue);
-	
+
 	if(mCustomAccel != g_mCustomAccel[client])
 	{
 		g_mCustomAccel[client] = mCustomAccel;
 		g_mCustomAccelChangedCount[client]++;
-		
+
 		if(g_mCustomAccelChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_customaccel ConVar to %d", client, mCustomAccel);
 				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
 		}
 	}
-	
+
 	g_mCustomAccelCheckedCount[client]++;
 }
 
 public void OnCustomAccelMaxRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
 	float mCustomAccelMax = StringToFloat(cvarValue);
-	
+
 	if(mCustomAccelMax != g_mCustomAccelMax[client])
 	{
 		g_mCustomAccelMax[client] = mCustomAccelMax;
 		g_mCustomAccelMaxChangedCount[client]++;
-		
+
 		if(g_mCustomAccelMaxChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_customaccel_max ConVar to %f", client, mCustomAccelMax);
 		}
 	}
-	
+
 	g_mCustomAccelMaxCheckedCount[client]++;
 }
 
 public void OnCustomAccelScaleRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
 	float mCustomAccelScale = StringToFloat(cvarValue);
-	
+
 	if(mCustomAccelScale != g_mCustomAccelScale[client])
 	{
 		g_mCustomAccelScale[client] = mCustomAccelScale;
 		g_mCustomAccelScaleChangedCount[client]++;
-		
+
 		if(g_mCustomAccelScaleChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_customaccel_scale ConVar to %f", client, mCustomAccelScale);
 				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
 		}
 	}
-	
+
 	g_mCustomAccelScaleCheckedCount[client]++;
 }
 
 public void OnCustomAccelExRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
 	float mCustomAccelExponent = StringToFloat(cvarValue);
-	
+
 	if(mCustomAccelExponent != g_mCustomAccelExponent[client])
 	{
 		g_mCustomAccelExponent[client] = mCustomAccelExponent;
 		g_mCustomAccelExponentChangedCount[client]++;
-		
+
 		if(g_mCustomAccelExponentChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_customaccel_exponent ConVar to %f", client, mCustomAccelExponent);
 				//AnticheatLog("%L changed their m_customaccel ConVar to %d", client, mCustomAccel);
 		}
 	}
-	
+
 	g_mCustomAccelExponentCheckedCount[client]++;
 }
 
@@ -1230,14 +1171,14 @@ public void OnRawInputRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 	{
 		g_mRawInputChangedCount[client]++;
 		g_mRawInput[client] = mRawInput;
-		
+
 		if(g_mRawInputChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their m_rawinput ConVar to %d", client, mRawInput);
 			//AnticheatLog(client, "%L changed their m_rawinput ConVar to %d", mRawInput);
 		}
 	}
-	
+
 	g_mRawInputCheckedCount[client]++;
 }
 
@@ -1248,14 +1189,14 @@ public void OnSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryRe
 	{
 		g_Sensitivity[client] = sensitivity;
 		g_SensitivityChangedCount[client]++;
-		
+
 		if(g_SensitivityChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their sensitivity ConVar to %.2f", client, sensitivity);
 				//AnticheatLog("%L changed their sensitivity ConVar to %.2f", client, sensitivity);
 		}
 	}
-	
+
 	g_SensitivityCheckedCount[client]++;
 }
 
@@ -1266,14 +1207,14 @@ public void OnYawSensitivityRetrieved(QueryCookie cookie, int client, ConVarQuer
 	{
 		g_JoySensitivity[client] = sensitivity;
 		g_JoySensitivityChangedCount[client]++;
-		
+
 		if(g_JoySensitivityChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
 				//AnticheatLog("%L changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
 		}
 	}
-	
+
 	g_JoySensitivityCheckedCount[client]++;
 }
 
@@ -1284,14 +1225,14 @@ public void OnZoomSensitivityRetrieved(QueryCookie cookie, int client, ConVarQue
 	{
 		g_ZoomSensitivity[client] = sensitivity;
 		g_ZoomSensitivityChangedCount[client]++;
-		
+
 		if(g_ZoomSensitivityChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their %s ConVar to %.2f", client, cvarName, sensitivity);
 				//AnticheatLog("%L changed their joy_yawsensitivity ConVar to %.2f", client, sensitivity);
 		}
 	}
-	
+
 	g_ZoomSensitivityCheckedCount[client]++;
 }
 
@@ -1302,14 +1243,14 @@ public void OnJoystickRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 	{
 		g_JoyStickChangedCount[client]++;
 		g_JoyStick[client] = joyStick;
-		
+
 		if(g_JoyStickChangedCount[client] > 1)
 		{
 			PrintToAdmins("%N changed their joystick ConVar to %d", client, joyStick);
 				//AnticheatLog("%L changed their joystick ConVar to %d", client, joyStick);
 		}
 	}
-	
+
 	g_JoyStickCheckedCount[client]++;
 }
 
@@ -1320,14 +1261,14 @@ public Action Hook_OnTouch(int client, int entity)
 	{
 		g_bTouchesWall[client] = true;
 	}
-	
+
 	char sClassname[64];
 	GetEntityClassname(entity, sClassname, sizeof(sClassname));
 	if(StrEqual(sClassname, "func_rotating"))
 	{
 		g_bTouchesFuncRotating[client] = true;
 	}
-	
+
 }
 
 public Action Bash_Stats(int client, int args)
@@ -1343,7 +1284,7 @@ public Action Bash_Stats(int client, int args)
 		{
 			target = GetEntPropEnt(client, Prop_Send, "m_hObserverTarget");
 		}
-		
+
 		if(0 < target <= MaxClients)
 		{
 			ShowBashStats(client, GetClientUserId(target));
@@ -1367,7 +1308,7 @@ public Action Bash_Stats(int client, int args)
 				ReplyToCommand(client, "[BASH] No player with userid '%s'.", sArg);
 			}
 		}
-		
+
 		char sName[MAX_NAME_LENGTH];
 		bool bFoundTarget;
 		for(int target = 1; target <= MaxClients; target++)
@@ -1382,13 +1323,13 @@ public Action Bash_Stats(int client, int args)
 				}
 			}
 		}
-		
+
 		if(!bFoundTarget)
 		{
 			ReplyToCommand(client, "[BASH] No player found with '%s' in their name.", sArg);
 		}
 	}
-	
+
 	return Plugin_Handled;
 }
 
@@ -1439,17 +1380,17 @@ void ShowBashStats(int client, int userid)
 		PrintToChat(client, "[BASH] Selected player no longer ingame.");
 		return;
 	}
-	
+
 	g_iTarget[client] = userid;
 	Menu menu = new Menu(BashStats_MainMenu);
 	char sName[MAX_NAME_LENGTH];
 	GetClientName(target, sName, sizeof(sName));
 	menu.SetTitle("[BASH] - Select stats for %N", target);
-	
+
 	menu.AddItem("start",      "Start Strafe (Original)");
 	menu.AddItem("end",        "End Strafe");
 	menu.AddItem("keys",       "Key Switch");
-	
+
 	char sGain[32];
 	FormatEx(sGain, 32, "Current gains: %.2f", GetGainPercent(target));
 	menu.AddItem("gain", sGain);
@@ -1459,7 +1400,7 @@ void ShowBashStats(int client, int userid)
 		menu.AddItem("man2",       "Manual Test (Angle)");
 		menu.AddItem("flags",      "Player flags", ITEMDRAW_DISABLED);
 	}*/
-	
+
 	menu.Display(client, MENU_TIME_FOREVER);
 }
 
@@ -1469,7 +1410,7 @@ public int BashStats_MainMenu(Menu menu, MenuAction action, int param1, int para
 	{
 		char sInfo[32];
 		menu.GetItem(param2, sInfo, sizeof(sInfo));
-		
+
 		if(StrEqual(sInfo, "start"))
 		{
 			ShowBashStats_StartStrafes(param1);
@@ -1496,14 +1437,14 @@ public int BashStats_MainMenu(Menu menu, MenuAction action, int param1, int para
 		}
 		else if(StrEqual(sInfo, "flags"))
 		{
-			
+
 		}
 	}
-	
+
 	if (action & MenuAction_End)
 	{
 		delete menu;
-	}	
+	}
 }
 
 void PerformMOTDTest(int client)
@@ -1513,7 +1454,7 @@ void PerformMOTDTest(int client)
 	{
 		return;
 	}
-	
+
 	//void ShowVGUIPanel(int client, const char[] name, Handle Kv, bool show)
 	//MotdChanger_SendClientMotd(client, "Welcome", "text", "Welcome to KawaiiClan!");
 	g_bMOTDTest[target] = true;
@@ -1529,7 +1470,7 @@ void PerformMOTDTest(int client)
 
 stock void PerformAngleTest(int client)
 {
-	
+
 }
 
 void ShowBashStats_StartStrafes(int client)
@@ -1540,7 +1481,7 @@ void ShowBashStats_StartStrafes(int client)
 		PrintToChat(client, "[BASH] Selected player no longer ingame.");
 		return;
 	}
-	
+
 	int array[MAX_FRAMES];
 	int buttons[4];
 	int size;
@@ -1553,31 +1494,31 @@ void ShowBashStats_StartStrafes(int client)
 			size++;
 		}
 	}
-	
+
 	if(size == 0)
 	{
 		PrintToChat(client, "[BASH] Player '%N' has no start strafe stats.", target);
 	}
 	float startStrafeMean = GetAverage(array, size);
 	float startStrafeSD   = StandardDeviation(array, size, startStrafeMean);
-	
+
 	Menu menu = new Menu(BashStats_StartStrafesMenu);
-	menu.SetTitle("[BASH] Start Strafe stats for %N\nAverage: %.2f | Deviation: %.2f\nA: %d, D: %d, W: %d, S: %d\n ", 
+	menu.SetTitle("[BASH] Start Strafe stats for %N\nAverage: %.2f | Deviation: %.2f\nA: %d, D: %d, W: %d, S: %d\n ",
 		target, startStrafeMean, startStrafeSD,
 		buttons[2], buttons[3], buttons[0], buttons[1]);
-	
+
 	char sDisplay[128];
 	for(int idx; idx < size; idx++)
 	{
 		Format(sDisplay, sizeof(sDisplay), "%s%d ", sDisplay, array[idx]);
-		
+
 		if((idx + 1) % 10 == 0  || size - idx == 1)
 		{
 			menu.AddItem("", sDisplay, ITEMDRAW_DISABLED);
 			FormatEx(sDisplay, sizeof(sDisplay), "");
 		}
 	}
-	
+
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -1587,19 +1528,19 @@ public int BashStats_StartStrafesMenu(Menu menu, MenuAction action, int param1, 
 	/*
 	if(action == MenuAction_Select)
 	{
-		
-	}	
+
+	}
 	*/
 	if(action == MenuAction_Cancel)
 	{
 		if(param2 == MenuCancel_ExitBack)
 			ShowBashStats(param1, g_iTarget[param1]);
 	}
-	
+
 	if (action & MenuAction_End)
 	{
 		delete menu;
-	}	
+	}
 }
 
 void ShowBashStats_EndStrafes(int client)
@@ -1610,7 +1551,7 @@ void ShowBashStats_EndStrafes(int client)
 		PrintToChat(client, "[BASH] Selected player no longer ingame.");
 		return;
 	}
-	
+
 	int array[MAX_FRAMES];
 	int buttons[4];
 	int size;
@@ -1623,32 +1564,32 @@ void ShowBashStats_EndStrafes(int client)
 			size++;
 		}
 	}
-	
+
 	if(size == 0)
 	{
 		PrintToChat(client, "[BASH] Player '%N' has no end strafe stats.", target);
 	}
-	
+
 	float mean = GetAverage(array, size);
 	float sd   = StandardDeviation(array, size, mean);
-	
+
 	Menu menu = new Menu(BashStats_EndStrafesMenu);
-	menu.SetTitle("[BASH] End Strafe stats for %N\nAverage: %.2f | Deviation: %.2f\nA: %d, D: %d, W: %d, S: %d\n ", 
+	menu.SetTitle("[BASH] End Strafe stats for %N\nAverage: %.2f | Deviation: %.2f\nA: %d, D: %d, W: %d, S: %d\n ",
 		target, mean, sd,
 		buttons[2], buttons[3], buttons[0], buttons[1]);
-	
+
 	char sDisplay[128];
 	for(int idx; idx < size; idx++)
 	{
 		Format(sDisplay, sizeof(sDisplay), "%s%d ", sDisplay, array[idx]);
-		
+
 		if((idx + 1) % 10 == 0  || (size - idx == 1))
 		{
 			menu.AddItem("", sDisplay, ITEMDRAW_DISABLED);
 			FormatEx(sDisplay, sizeof(sDisplay), "");
 		}
 	}
-	
+
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -1658,19 +1599,19 @@ public int BashStats_EndStrafesMenu(Menu menu, MenuAction action, int param1, in
 	/*
 	if(action == MenuAction_Select)
 	{
-		
-	}	
+
+	}
 	*/
 	if(action == MenuAction_Cancel)
 	{
 		if(param2 == MenuCancel_ExitBack)
 			ShowBashStats(param1, g_iTarget[param1]);
 	}
-	
+
 	if (action & MenuAction_End)
 	{
 		delete menu;
-	}	
+	}
 }
 
 void ShowBashStats_KeySwitches(int client)
@@ -1681,7 +1622,7 @@ void ShowBashStats_KeySwitches(int client)
 		PrintToChat(client, "[BASH] Selected player no longer ingame.");
 		return;
 	}
-	
+
 	Menu menu = new Menu(BashStats_KeySwitchesMenu);
 	menu.SetTitle("[BASH] Select key switch type");
 	menu.AddItem("move", "Movement");
@@ -1696,7 +1637,7 @@ public int BashStats_KeySwitchesMenu(Menu menu, MenuAction action, int param1, i
 	{
 		char sInfo[32];
 		menu.GetItem(param2, sInfo, sizeof(sInfo));
-		
+
 		if(StrEqual(sInfo, "move"))
 		{
 			ShowBashStats_KeySwitches_Move(param1);
@@ -1705,17 +1646,17 @@ public int BashStats_KeySwitchesMenu(Menu menu, MenuAction action, int param1, i
 		{
 			ShowBashStats_KeySwitches_Keys(param1);
 		}
-	}	
+	}
 	if(action == MenuAction_Cancel)
 	{
 		if(param2 == MenuCancel_ExitBack)
 			ShowBashStats(param1, g_iTarget[param1]);
 	}
-	
+
 	if (action & MenuAction_End)
 	{
 		delete menu;
-	}	
+	}
 }
 
 void ShowBashStats_KeySwitches_Move(int client)
@@ -1726,7 +1667,7 @@ void ShowBashStats_KeySwitches_Move(int client)
 		PrintToChat(client, "[BASH] Selected player no longer ingame.");
 		return;
 	}
-	
+
 	int array[MAX_FRAMES_KEYSWITCH];
 	int size;
 	for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
@@ -1739,22 +1680,22 @@ void ShowBashStats_KeySwitches_Move(int client)
 	}
 	float mean = GetAverage(array, size);
 	float sd   = StandardDeviation(array, size, mean);
-	
+
 	Menu menu = new Menu(BashStats_KeySwitchesMenu_Move);
 	menu.SetTitle("[BASH] Sidemove Switch stats for %N\nAverage: %.2f | Deviation: %.2f\n ", target, mean, sd);
-	
+
 	char sDisplay[128];
 	for(int idx; idx < size; idx++)
 	{
 		Format(sDisplay, sizeof(sDisplay), "%s%d ", sDisplay, array[idx]);
-		
+
 		if((idx + 1) % 10 == 0  || (size - idx == 1))
 		{
 			menu.AddItem("", sDisplay, ITEMDRAW_DISABLED);
 			FormatEx(sDisplay, sizeof(sDisplay), "");
 		}
 	}
-	
+
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -1767,7 +1708,7 @@ void ShowBashStats_KeySwitches_Keys(int client)
 		PrintToChat(client, "[BASH] Selected player no longer ingame.");
 		return;
 	}
-	
+
 	int array[MAX_FRAMES_KEYSWITCH];
 	int size, positiveCount;
 	for(int idx; idx < MAX_FRAMES_KEYSWITCH; idx++)
@@ -1776,32 +1717,32 @@ void ShowBashStats_KeySwitches_Keys(int client)
 		{
 			array[idx] = g_iKeySwitch_Stats[target][KeySwitchData_Difference][BT_Key][idx];
 			size++;
-			
+
 			if(g_iKeySwitch_Stats[target][KeySwitchData_Difference][BT_Key][idx] >= 0)
 			{
 				positiveCount++;
 			}
 		}
 	}
-	
+
 	float mean = GetAverage(array, size);
 	float sd   = StandardDeviation(array, size, mean);
 	float pctPositive = float(positiveCount) / float(size);
 	Menu menu = new Menu(BashStats_KeySwitchesMenu_Move);
 	menu.SetTitle("[BASH] Key Switch stats for %N\nAverage: %.2f | Deviation: %.2f | Positive: %.2f\n ", target, mean, sd, pctPositive);
-	
+
 	char sDisplay[128];
 	for(int idx; idx < size; idx++)
 	{
 		Format(sDisplay, sizeof(sDisplay), "%s%d ", sDisplay, array[idx]);
-		
+
 		if((idx + 1) % 10 == 0  || (size - idx == 1))
 		{
 			menu.AddItem("", sDisplay, ITEMDRAW_DISABLED);
 			FormatEx(sDisplay, sizeof(sDisplay), "");
 		}
 	}
-	
+
 	menu.ExitBackButton = true;
 	menu.Display(client, MENU_TIME_FOREVER);
 }
@@ -1811,25 +1752,25 @@ public int BashStats_KeySwitchesMenu_Move(Menu menu, MenuAction action, int para
 	/*
 	if(action == MenuAction_Select)
 	{
-		
-	}	
+
+	}
 	*/
 	if(action == MenuAction_Cancel)
 	{
 		if(param2 == MenuCancel_ExitBack)
 			ShowBashStats_KeySwitches(param1);
 	}
-	
+
 	if (action & MenuAction_End)
 	{
 		delete menu;
-	}	
+	}
 }
 
 float StandardDeviation(int[] array, int size, float mean, bool countZeroes = true)
 {
 	float sd;
-	
+
 	for(int idx; idx < size; idx++)
 	{
 		if(countZeroes || array[idx] != 0)
@@ -1837,23 +1778,23 @@ float StandardDeviation(int[] array, int size, float mean, bool countZeroes = tr
 			sd += Pow(float(array[idx]) - mean, 2.0);
 		}
 	}
-	
+
 	return SquareRoot(sd/size);
 }
 
 float GetAverage(int[] array, int size, bool countZeroes = true)
 {
 	int total;
-	
+
 	for(int idx; idx < size; idx++)
 	{
 		if(countZeroes || array[idx] != 0)
 		{
 			total += array[idx];
 		}
-		
+
 	}
-	
+
 	return float(total) / float(size);
 }
 
@@ -1869,33 +1810,33 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		g_iRealButtons[client] = buttons;
 		// Update all information this tick
 		bool bCheck = true;
-		
+
 		#if defined TIMER
-		
+
 		g_bIsBeingTimed[client] = false;
 		if(Shavit_GetTimerStatus(client) == Timer_Running) {
 			g_bIsBeingTimed[client] = true;
 		}
-		
+
 		//if(TimerInfo(client).Paused == true)
 		if(Shavit_GetTimerStatus(client) == Timer_Paused)
 		{
 			bCheck = false;
 		}
-		
+
 		char sSpecial[128];
 		int style = Shavit_GetBhopStyle(client);
 		Shavit_GetStyleStrings(style, sSpecialString, sSpecial, 128);
-		if(StrContains(sSpecial, "bash_bypass", false) != -1) 
+		if(StrContains(sSpecial, "bash_bypass", false) != -1)
 		{
 			 	bCheck = false;
-		} 
-		
+		}
+
 		#endif
-		
+
 		UpdateButtons(client, vel, buttons);
 		UpdateAngles(client, angles);
-		
+
 		if(bCheck == true)
 		{
 			if(g_bCheckedYet[client] == false)
@@ -1903,12 +1844,12 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				g_bCheckedYet[client] = true;
 				g_fLastCheckTime[client] = GetEngineTime();
 			}
-			
+
 			if(GetEntityMoveType(client) != MOVETYPE_NONE)
 			{
 				g_mLastMoveType[client] = GetEntityMoveType(client);
 			}
-			
+
 			float tickRate = 1.0 / GetTickInterval();
 			g_iRunCmdsPerSecond[client]++;
 			if(GetEngineTime() - g_fLastCheckTime[client] >= 1.0)
@@ -1929,17 +1870,17 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 					}
 					g_iBadSeconds[client] = 0;
 				}
-				
+
 				g_fLastCheckTime[client] = GetEngineTime();
 				g_iRunCmdsPerSecond[client] = 0;
 			}
 		}
-		
+
 		if(!g_bDhooksLoaded) CheckForTeleport(client);
 		CheckForEndKey(client);
 		CheckForTurn(client);
 		CheckForStartKey(client);
-		
+
 		// After we have all the information we can get, do stuff with it
 		if(!(GetEntityFlags(client) & (FL_ONGROUND|FL_INWATER)) && GetEntityMoveType(client) == MOVETYPE_WALK && bCheck)
 		{
@@ -1949,44 +1890,44 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 				{
 					ClientReleasedKey(client, idx, BT_Move);
 				}
-				
+
 				if(g_iLastReleaseTick[client][idx][BT_Key] == g_iCmdNum[client])
 				{
 					ClientReleasedKey(client, idx, BT_Key);
 				}
 			}
-			
+
 			if(g_iLastTurnTick[client] == g_iCmdNum[client])
 			{
 				ClientTurned(client, g_iLastTurnDir[client]);
 			}
-			
+
 			if(g_iLastStopTurnTick[client] == g_iCmdNum[client])
 			{
 				ClientStoppedTurning(client);
 			}
-			
+
 			for(int idx; idx < 4; idx++)
 			{
 				if(g_iLastPressTick[client][idx][BT_Move] == g_iCmdNum[client])
 				{
 					ClientPressedKey(client, idx, BT_Move);
 				}
-				
+
 				if(g_iLastPressTick[client][idx][BT_Key] == g_iCmdNum[client])
 				{
 					ClientPressedKey(client, idx, BT_Key);
 				}
 			}
 		}
-		
+
 		if(bCheck)
 		{
 			CheckForIllegalMovement(client, vel, buttons);
 			CheckForIllegalTurning(client, vel);
 			UpdateGains(client, vel, angles, buttons);
 		}
-		
+
 		g_fLastMove[client][0]   = vel[0];
 		g_fLastMove[client][1]   = vel[1];
 		g_fLastMove[client][2]   = vel[2];
@@ -2025,27 +1966,27 @@ void CheckForIllegalTurning(int client, float vel[3])
 		if(g_iIllegalYawCount[client] > 30 && g_iPlusLeftCount[client] == 0)
 		{
 			//AnticheatLog(client, "is turning with illegal yaw values (m_yaw: %f, sens: %f, m_customaccel: %d, count: %d, m_yaw changes: %d, Joystick: %d)", g_mYaw[client], g_Sensitivity[client], g_mCustomAccel[client], g_iIllegalYawCount[client], g_mYawChangedCount[client], g_JoyStick[client]);
-			
+
 			char sValues[256];
 			for(int idx; idx < 20; idx++)
 			{
 				Format(sValues, 256, "%s %.3f", sValues, g_fIList[idx]);
 			}
-			
+
 			//AnticheatLog(client, sValues);
 		}
-		
+
 		g_iIllegalYawCount[client] = 0;
 		g_iPlusLeftCount[client]   = 0;
 	}
-	
-	
+
+
 	// Don't bother checking if they arent turning
 	if(FloatAbs(g_fAngleDifference[client][1]) < 0.01)
 	{
 		return;
 	}
-	
+
 	// Only calculate illegal turns when player cvars have been checked
 	if(g_mCustomAccelCheckedCount[client] == 0 || g_mFilterCheckedCount[client] == 0 || g_mYawCheckedCount[client] == 0 || g_SensitivityCheckedCount[client] == 0)
 	{
@@ -2075,26 +2016,26 @@ void CheckForIllegalTurning(int client, float vel[3])
 	{
 		return;
 	}
-	
+
 	if(g_iIllegalSidemoveCount[client] > 0)
 	{
 		return;
 	}
-	
+
 	// Attempt to prevent players who are using xbox controllers from triggering the anticheat, because they can't use controller and have legal sidemove values at the same time
 	float fMaxMove;
 	if(g_Engine == Engine_CSS) fMaxMove = 400.0;
 	else if(g_Engine == Engine_CSGO) fMaxMove = 450.0;
-	
+
 	if(FloatAbs(vel[0]) != fMaxMove && FloatAbs(vel[1]) != fMaxMove)
 	{
 		return;
 	}
-	
+
 	float my = g_fAngleDifference[client][0];
 	float mx = g_fAngleDifference[client][1];
 	float fCoeff;
-	
+
 	// Player should not be able to turn at all with sensitivity or m_yaw equal to 0 so detect them if they are
 	if((g_mYaw[client] == 0.0 || g_Sensitivity[client] == 0.0) && !(GetClientButtons(client) & (IN_LEFT|IN_RIGHT)))
 	{
@@ -2103,7 +2044,7 @@ void CheckForIllegalTurning(int client, float vel[3])
 	else if(g_mCustomAccel[client] <= 0 || g_mCustomAccel[client] > 3)
 	{
 		//fCoeff = mx / (g_mYaw[client] * g_Sensitivity[client]);
-		fCoeff = g_Sensitivity[client];	
+		fCoeff = g_Sensitivity[client];
 	}
 	else if(g_mCustomAccel[client] == 1 || g_mCustomAccel[client] == 2)
 	{
@@ -2112,14 +2053,14 @@ void CheckForIllegalTurning(int client, float vel[3])
 		float accelerated_sensitivity_max      = g_mCustomAccelMax[client];
 		float accelerated_sensitivity_exponent = g_mCustomAccelExponent[client];
 		float accelerated_sensitivity          = Pow(raw_mouse_movement_distance, accelerated_sensitivity_exponent) * acceleration_scale + g_Sensitivity[client];
-		
+
 		if (accelerated_sensitivity_max > 0.0001 && accelerated_sensitivity > accelerated_sensitivity_max)
 		{
 			accelerated_sensitivity = accelerated_sensitivity_max;
 		}
-		
+
 		fCoeff = accelerated_sensitivity;
-		
+
 		if(g_mCustomAccel[client] == 2)
 		{
 			fCoeff *= g_mYaw[client];
@@ -2130,25 +2071,25 @@ void CheckForIllegalTurning(int client, float vel[3])
 		//float raw_mouse_movement_distance_squared = (mx * mx) + (my * my);
 		//float fExp = MAX(0.0, (g_mCustomAccelExponent[client] - 1.0) / 2.0);
 		//float accelerated_sensitivity = Pow(raw_mouse_movement_distance_squared, fExp) * g_Sensitivity[client];
-		
+
 		//PrintToChat(client, "%f %f", raw_mouse_movement_distance_squared, fExp);
 		//PrintToChat(client, "%f", accelerated_sensitivity);
 		//PrintToChat(client, "%f", mx);
-		
+
 		//fCoeff = accelerated_sensitivity;
 		fCoeff = g_Sensitivity[client];
-		
+
 		return;
 	}
-	
+
 	if(g_Engine == Engine_CSS && g_mFilter[client] == true)
 	{
 		fCoeff /= 4;
-	}	
-	
+	}
+
 	float fTurn = mx / (g_mYaw[client] * fCoeff);
 	float fRounded = float(RoundFloat(fTurn));
-		
+
 	if(FloatAbs(fRounded - fTurn) > 0.1)
 	{
 		g_fIList[client][g_iCurrentIFrame[client]] = fTurn;
@@ -2158,10 +2099,10 @@ void CheckForIllegalTurning(int client, float vel[3])
 }
 
 void CheckForWOnlyHack(int client)
-{	
+{
 	if(FloatAbs(g_fAngleDifference[client][1] - g_fLastAngleDifference[client][1]) > 13 && // Player turned more than 13 degrees in 1 tick
-	g_fAngleDifference[client][1] != 0.0 && 
-	((g_iCmdNum[client] - g_iLastTeleportTick[client]) > 200// && 
+	g_fAngleDifference[client][1] != 0.0 &&
+	((g_iCmdNum[client] - g_iLastTeleportTick[client]) > 200// &&
 	//g_iButtons[client][BT_Move] & (1 << GetOppositeButton(GetDesiredButton(client, g_iLastTurnDir[client])))// &&
 	))
 	{
@@ -2175,14 +2116,14 @@ void CheckForWOnlyHack(int client)
 		//GetTurnDirectionName(g_iLastTurnDir[client], sTurn, sizeof(sTurn));
 		//PrintToAdmins("No: Diff: %.1f, Btn: %d, Gain: %.1f", FloatAbs(g_fAngleDifference[client] - g_fLastAngleDifference[client]), g_iButtons[client][BT_Move] & (1 << GetOppositeButton(GetDesiredButton(client, g_iLastTurnDir[client]))), GetGainPercent(client));
 	}
-	
+
 	#if defined TIMER
-	
+
 	g_iIllegalTurn_IsTiming[client][g_iIllegalTurn_CurrentFrame[client]] = g_bIsBeingTimed[client];
 	#endif
-	
+
 	g_iIllegalTurn_CurrentFrame[client] = (g_iIllegalTurn_CurrentFrame[client] + 1) % MAX_FRAMES;
-	
+
 	if(g_iIllegalTurn_CurrentFrame[client] == 0)
 	{
 		int illegalCount, timingCount;
@@ -2192,19 +2133,19 @@ void CheckForWOnlyHack(int client)
 			{
 				illegalCount++;
 			}
-			
+
 			if(g_iIllegalTurn_IsTiming[client][idx] == true)
 			{
 				timingCount++;
 			}
 		}
-		
+
 		float illegalPct, timingPct;
 		illegalPct = float(illegalCount) / float(MAX_FRAMES);
 		timingPct  = float(timingCount) / float(MAX_FRAMES);
 		if(illegalPct > 0.6)
 		{
-			
+
 			#if defined TIMER
 			char sStyle[32];
 			int style = Shavit_GetBhopStyle(client);
@@ -2212,13 +2153,13 @@ void CheckForWOnlyHack(int client)
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
 			AnticheatLog(client, "angle snap hack, Pct: %.2f％, Timing: %.1f％, Style: %s", illegalPct * 100.0, timingPct * 100.0, sStyle);
 			#endif
-			
+
 			#if !defined TIMER
 			AnticheatLog(client, "angle snap hack, Pct: %.2f％, Timing: %.1f％", illegalPct * 100.0, timingPct * 100.0);
 			#endif
 		}
 	}
-	
+
 	return;
 }
 
@@ -2230,7 +2171,7 @@ void CheckForStartKey(int client)
 		{
 			g_iLastPressTick[client][idx][BT_Move] = g_iCmdNum[client];
 		}
-		
+
 		if(!(g_iLastButtons[client][BT_Key] & (1 << idx)) && (g_iButtons[client][BT_Key] & (1 << idx)))
 		{
 			g_iLastPressTick[client][idx][BT_Key] = g_iCmdNum[client];
@@ -2245,23 +2186,23 @@ void ClientPressedKey(int client, int button, int btype)
 	if(btype == BT_Move)
 	{
 		g_iStrafesDone[client]++; // player pressed either w,a,s,d. update strafe count
-		
+
 		int turnDir = GetDesiredTurnDir(client, button, false);
-	
-		if(g_iLastTurnDir[client] == turnDir && 
+
+		if(g_iLastTurnDir[client] == turnDir &&
 		g_iStartStrafe_LastRecordedTick[client] != g_iCmdNum[client] &&
 		g_iLastPressTick[client][button][BT_Move] != g_iLastPressTick_Recorded[client][button][BT_Move] &&
 		g_iLastTurnTick[client] != g_iLastTurnTick_Recorded_StartStrafe[client])
 		{
 			int difference = g_iLastTurnTick[client] - g_iLastPressTick[client][button][BT_Move];
-		
+
 			if(-15 <= difference <= 15)
 			{
 				RecordStartStrafe(client, button, turnDir, "ClientPressedKey");
 			}
 		}
 	}
-	
+
 	// Check if player finished switching their keys
 	int oppositeButton = GetOppositeButton(button);
 	int difference = g_iLastPressTick[client][button][btype] - g_iLastReleaseTick[client][oppositeButton][btype];
@@ -2277,11 +2218,11 @@ void CheckForTeleport(int client)
 {
 	float vPos[3];
 	GetClientAbsOrigin(client, vPos);
-			   
-	float distance = SquareRoot(Pow(vPos[0] - g_fLastPosition[client][0], 2.0) + 
-								Pow(vPos[1] - g_fLastPosition[client][1], 2.0) + 
+
+	float distance = SquareRoot(Pow(vPos[0] - g_fLastPosition[client][0], 2.0) +
+								Pow(vPos[1] - g_fLastPosition[client][1], 2.0) +
 								Pow(vPos[2] - g_fLastPosition[client][2], 2.0));
-	
+
 	if(distance > 35.0)
 	{
 		g_iLastTeleportTick[client] = g_iCmdNum[client];
@@ -2296,7 +2237,7 @@ void CheckForEndKey(int client)
 		{
 			g_iLastReleaseTick[client][idx][BT_Move] = g_iCmdNum[client];
 		}
-		
+
 		if((g_iLastButtons[client][BT_Key] & (1 << idx)) && !(g_iButtons[client][BT_Key] & (1 << idx)))
 		{
 			g_iLastReleaseTick[client][idx][BT_Key] = g_iCmdNum[client];
@@ -2310,27 +2251,27 @@ void ClientReleasedKey(int client, int button, int btype)
 	{
 		// Record end strafe if it is actually an end strafe
 		int turnDir = GetDesiredTurnDir(client, button, true);
-	
-		if((g_iLastTurnDir[client] == turnDir || g_bIsTurning[client] == false) && 
+
+		if((g_iLastTurnDir[client] == turnDir || g_bIsTurning[client] == false) &&
 		g_iEndStrafe_LastRecordedTick[client] != g_iCmdNum[client] &&
 		g_iLastReleaseTick_Recorded[client][button][BT_Move] != g_iLastReleaseTick[client][button][BT_Move] &&
 		g_iLastTurnTick_Recorded_EndStrafe[client] != g_iLastTurnTick[client])
 		{
 			int difference = g_iLastTurnTick[client] - g_iLastReleaseTick[client][button][BT_Move];
-		
+
 			if(-15 <= difference <= 15)
 			{
 				RecordEndStrafe(client, button, turnDir, "ClientReleasedKey");
 			}
 		}
 	}
-	
+
 	// Check if we should record a key switch (BT_Key)
 	if(btype == BT_Key)
 	{
 		int oppositeButton = GetOppositeButton(button);
-		
-		if(g_iLastReleaseTick[client][button][BT_Key] - g_iLastPressTick[client][oppositeButton][BT_Key] <= 15 && 
+
+		if(g_iLastReleaseTick[client][button][BT_Key] - g_iLastPressTick[client][oppositeButton][BT_Key] <= 15 &&
 		g_iKeySwitch_LastRecordedTick[client][BT_Key] != g_iCmdNum[client] &&
 		g_iLastReleaseTick[client][button][btype] != g_iLastReleaseTick_Recorded_KS[client][button][btype] &&
 		g_iLastPressTick[client][oppositeButton][btype] != g_iLastPressTick_Recorded_KS[client][oppositeButton][btype])
@@ -2373,35 +2314,35 @@ void ClientTurned(int client, int turnDir)
 {
 	// Check if client ended a strafe
 	int button         = GetDesiredButton(client, turnDir);
-	
+
 	int oppositeButton = GetOppositeButton(button);
-	if(!(g_iButtons[client][BT_Move] & (1 << oppositeButton)) && 
+	if(!(g_iButtons[client][BT_Move] & (1 << oppositeButton)) &&
 		g_iEndStrafe_LastRecordedTick[client] != g_iCmdNum[client] &&
 		g_iReleaseTickAtLastEndStrafe[client][oppositeButton] != g_iLastReleaseTick[client][oppositeButton][BT_Move] &&
 		g_iLastTurnTick_Recorded_EndStrafe[client] != g_iLastTurnTick[client])
 	{
 		int difference = g_iLastTurnTick[client] - g_iLastReleaseTick[client][oppositeButton][BT_Move];
-	
+
 		if(-15 <= difference <= 15)
 		{
 			RecordEndStrafe(client, oppositeButton, turnDir, "ClientTurned");
 		}
 	}
-	
+
 	// Check if client just started a strafe
-	if(g_iButtons[client][BT_Move] & (1 << button) && 
+	if(g_iButtons[client][BT_Move] & (1 << button) &&
 	g_iStartStrafe_LastRecordedTick[client] != g_iCmdNum[client] &&
 	g_iLastPressTick_Recorded[client][button][BT_Move] != g_iLastPressTick[client][button][BT_Move] &&
 	g_iLastTurnTick_Recorded_StartStrafe[client] != g_iLastTurnTick[client])
 	{
 		int difference = g_iLastTurnTick[client] - g_iLastPressTick[client][button][BT_Move];
-	
+
 		if(-15 <= difference <= 15)
 		{
 			RecordStartStrafe(client, button, turnDir, "ClientTurned");
 		}
 	}
-	
+
 	// Check if client is cheating on w-only
 	CheckForWOnlyHack(client);
 }
@@ -2410,15 +2351,15 @@ void ClientStoppedTurning(int client)
 {
 	int turnDir = g_iLastTurnDir[client];
 	int button  = GetDesiredButton(client, turnDir);
-	
+
 	// if client already let go of movement button, and end strafe hasn't been recorded this tick and since they released their key
-	if(!(g_iButtons[client][BT_Move] & (1 << button)) && 
+	if(!(g_iButtons[client][BT_Move] & (1 << button)) &&
 		g_iEndStrafe_LastRecordedTick[client] != g_iCmdNum[client] &&
 		g_iReleaseTickAtLastEndStrafe[client][button] != g_iLastReleaseTick[client][button][BT_Move] &&
 		g_iLastTurnTick_Recorded_EndStrafe[client] != g_iLastStopTurnTick[client])
 	{
 		int difference = g_iLastStopTurnTick[client] - g_iLastReleaseTick[client][button][BT_Move];
-	
+
 		if(-15 <= difference <= 15)
 		{
 			RecordEndStrafe(client, button, turnDir, "ClientStoppedTurning");
@@ -2430,7 +2371,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 {
 	g_iLastPressTick_Recorded[client][button][BT_Move] = g_iLastPressTick[client][button][BT_Move];
 	g_iLastTurnTick_Recorded_StartStrafe[client]       = g_iLastTurnTick[client];
-	
+
 	int moveDir   = GetDirection(client);
 	int currFrame = g_iStartStrafe_CurrentFrame[client];
 	g_iStartStrafe_LastRecordedTick[client] = g_iCmdNum[client];
@@ -2444,7 +2385,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	#endif
 	g_bStartStrafe_IsRecorded[client][currFrame] = true;
 	g_iStartStrafe_CurrentFrame[client] = (g_iStartStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
-	
+
 	if(g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame] == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
 		g_iStartStrafe_PerfCount[client]++;
@@ -2453,13 +2394,13 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	{
 		g_iStartStrafe_PerfCount[client] = 0;
 	}
-	
+
 	if(g_iStartStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
 	{
 		AnticheatLog(client, "too many perfect strafes in a row (%d)", g_iStartStrafe_PerfCount[client]);
 		AutoBanPlayer(client);
 	}
-	
+
 	if(g_iStartStrafe_CurrentFrame[client] == 0)
 	{
 		int array[MAX_FRAMES];
@@ -2470,7 +2411,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 			{
 				array[idx] = g_iStartStrafe_Stats[client][StrafeData_Difference][idx];
 				size++;
-				
+
 				if(g_iStartStrafe_Stats[client][StrafeData_IsTiming][idx] == true)
 				{
 					timingCount++;
@@ -2479,7 +2420,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 		}
 		float mean = GetAverage(array, size);
 		float sd   = StandardDeviation(array, size, mean);
-		
+
 		if(sd < 0.8)
 		{
 			char sStyle[32];
@@ -2490,7 +2431,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 			#endif
 			float timingPct = float(timingCount) / float(MAX_FRAMES);
 			AnticheatLog(client, "start strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
-			
+
 			#if defined TIMER
 			if(sd <= 0.4 && timingPct == 1.0)
 			#else
@@ -2501,12 +2442,12 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 			}
 		}
 	}
-	
+
 	//char sOutput[128], sButton[16], sTurn[16], sMove[16];
 	//GetTurnDirectionName(turnDir, sTurn, sizeof(sTurn));
 	//GetMoveDirectionName(button, sButton, sizeof(sButton));
 	//GetMoveDirectionName(moveDir, sMove, sizeof(sMove));
-	
+
 	//PrintToAdmins("Turned %s | Pressed %s | Moving %s | Difference %d",
 	//	sTurn,
 	//	sButton,
@@ -2527,10 +2468,10 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	#if defined TIMER
 	g_iEndStrafe_Stats[client][StrafeData_IsTiming][currFrame]      = g_bIsBeingTimed[client];
 	#endif
-	
+
 	int difference = g_iLastReleaseTick[client][button][BT_Move] - g_iLastStopTurnTick[client];
 	g_iLastTurnTick_Recorded_EndStrafe[client] = g_iLastStopTurnTick[client];
-	
+
 	if(g_iLastTurnTick[client] > g_iLastStopTurnTick[client])
 	{
 		difference = g_iLastReleaseTick[client][button][BT_Move] - g_iLastTurnTick[client];
@@ -2540,7 +2481,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	g_bEndStrafe_IsRecorded[client][currFrame]                   = true;
 	g_iEndStrafe_Stats[client][StrafeData_Tick][currFrame]       = g_iCmdNum[client];
 	g_iEndStrafe_CurrentFrame[client] = (g_iEndStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
-	
+
 	if(g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame] == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
 		g_iEndStrafe_PerfCount[client]++;
@@ -2549,13 +2490,13 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	{
 		g_iEndStrafe_PerfCount[client] = 0;
 	}
-	
+
 	if(g_iEndStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
 	{
 		AnticheatLog(client, "too many perfect end strafes in a row (%d)", g_iEndStrafe_PerfCount[client]);
 		//AutoBanPlayer(client);
 	}
-	
+
 	if(g_iEndStrafe_CurrentFrame[client] == 0)
 	{
 		int array[MAX_FRAMES];
@@ -2566,7 +2507,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 			{
 				array[idx] = g_iEndStrafe_Stats[client][StrafeData_Difference][idx];
 				size++;
-				
+
 				if(g_iEndStrafe_Stats[client][StrafeData_IsTiming][idx] == true)
 				{
 					timingCount++;
@@ -2575,7 +2516,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 		}
 		float mean = GetAverage(array, size);
 		float sd   = StandardDeviation(array, size, mean);
-		
+
 		if(sd < 0.8)
 		{
 			char sStyle[32];
@@ -2586,7 +2527,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 			#endif
 			float timingPct = float(timingCount) / float(MAX_FRAMES);
 			AnticheatLog(client, "end strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
-			
+
 			#if defined TIMER
 			if(sd <= 0.4 && timingPct == 1.0)
 			#else
@@ -2602,7 +2543,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	GetTurnDirectionName(turnDir, sTurn, sizeof(sTurn));
 	GetMoveDirectionName(button, sButton, sizeof(sButton));
 	GetMoveDirectionName(moveDir, sMove, sizeof(sMove));
-	
+
 	PrintToAdmins("Turn %s | Press %s | Moving %s | Dif %d | %s",
 		sTurn,
 		sButton,
@@ -2610,7 +2551,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 		g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame],
 		caller);
 	*/
-	
+
 	// Check key press count
 	//PrintToChat(client, "%d", g_iKeyPressesThisStrafe[client][BT_Move]);
 	g_iKeyPressesThisStrafe[client][BT_Move] = 0;
@@ -2631,7 +2572,7 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 	g_iKeySwitch_CurrentFrame[client][btype]                                = (g_iKeySwitch_CurrentFrame[client][btype] + 1) % MAX_FRAMES_KEYSWITCH;
 	g_iLastPressTick_Recorded_KS[client][button][btype]                     = g_iLastPressTick[client][button][btype];
 	g_iLastReleaseTick_Recorded_KS[client][oppositeButton][btype]           = g_iLastReleaseTick[client][oppositeButton][btype];
-	
+
 	// After we have a new set of data, check to see if they are cheating
 	if(g_iKeySwitch_CurrentFrame[client][btype] == 0)
 	{
@@ -2643,7 +2584,7 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			{
 				array[idx] = g_iKeySwitch_Stats[client][KeySwitchData_Difference][btype][idx];
 				size++;
-				
+
 				if(btype == BT_Key)
 				{
 					if(g_iKeySwitch_Stats[client][KeySwitchData_Difference][BT_Key][idx] >= 0)
@@ -2651,19 +2592,19 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 						positiveCount++;
 					}
 				}
-				
+
 				if(g_iKeySwitch_Stats[client][KeySwitchData_Difference][BT_Key][idx] == 0)
 				{
 					nullCount++;
 				}
-				
+
 				if(g_iKeySwitch_Stats[client][KeySwitchData_IsTiming][btype][idx] == true)
 				{
 					timingCount++;
 				}
 			}
 		}
-		
+
 		float mean = GetAverage(array, size);
 		float sd   = StandardDeviation(array, size, mean);
 		float nullPct = float(nullCount) / float(MAX_FRAMES_KEYSWITCH);
@@ -2676,12 +2617,12 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 					//PrintToAdmins("%N key switch positive count every frame", client);
 				}
 			}
-			
+
 			float timingPct, positivePct;
 			positivePct = float(positiveCount) / float(MAX_FRAMES_KEYSWITCH);
 			timingPct   = float(timingCount) / float(MAX_FRAMES_KEYSWITCH);
-			
-			
+
+
 			#if defined TIMER
 			char sStyle[32];
 			int style = Shavit_GetBhopStyle(client);
@@ -2689,12 +2630,12 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 			FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
 			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f, Style: %s", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100, sStyle);
 			#endif
-			
+
 			//AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f%%", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
 			#if !defined TIMER
 			AnticheatLog(client, "key switch %d, avg: %.2f, dev: %.2f, p: %.2f％, nullPct: %.2f, Timing: %.1f", btype, mean, sd, positivePct * 100, nullPct * 100, timingPct * 100);
 			#endif
-			if(IsClientInGame(client) && g_hAntiNull.BoolValue) 
+			if(IsClientInGame(client) && g_hAntiNull.BoolValue)
 			{
 				// Add a delay to the kick in case they are using an obvious strafehack that would ban them anyway
 				CreateTimer(10.0, Timer_NullKick, GetClientUserId(client));
@@ -2706,11 +2647,10 @@ stock void RecordKeySwitch(int client, int button, int oppositeButton, int btype
 public Action Timer_NullKick(Handle timer, int userid)
 {
 	int client = GetClientOfUserId(userid);
-	
+
 	if(client != 1)
 	{
 		KickClient(client, "Kicked for potentional movement config");
-		PrintToDiscord(client, "Kicked for potential movement config.");
 	}
 }
 
@@ -2749,7 +2689,7 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 		bInvalid = true;
 		g_iLastIllegalReason[client] = 6;
 	}
-	
+
 	if(bInvalid == true)
 	{
 		g_InvalidButtonSidemoveCount[client]++;
@@ -2758,19 +2698,19 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 	{
 		g_InvalidButtonSidemoveCount[client] = 0;
 	}
-	
+
 	if(g_InvalidButtonSidemoveCount[client] >= 4)
 	{
 		vel[0] = 0.0;
 		vel[1] = 0.0;
 		vel[2] = 0.0;
 	}
-	
+
 	if(g_InvalidButtonSidemoveCount[client] == 0 && g_iLastInvalidButtonCount[client] >= 10)
 	{
 		AnticheatLog(client, "has invalid buttons and sidemove combination %d %d", g_iLastIllegalReason[client], g_InvalidButtonSidemoveCount[client]);
 	}
-	
+
 	/*
 	if((vel[0] != float(RoundToFloor(vel[0])) || vel[1] != float(RoundToFloor(vel[1]))) || (RoundFloat(vel[0]) % 25 != 0 || RoundFloat(vel[1]) % 25 != 0))
 	{
@@ -2783,7 +2723,7 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 		}
 	}
 	*/
-	
+
 	// Prevent 28 velocity exploit
 	float fMaxMove;
 	if(g_Engine == Engine_CSS)
@@ -2794,14 +2734,14 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 	{
 		fMaxMove = 450.0;
 	}
-	
+
 	if(RoundToFloor(vel[0] * 100.0) % 625 != 0 || RoundToFloor( vel[1] * 100.0 ) % 625 != 0)
 	{
 		g_iIllegalSidemoveCount[client]++;
 		vel[0] = 0.0;
 		vel[1] = 0.0;
 		vel[2] = 0.0;
-		
+
 		if(FloatAbs(g_fAngleDifference[client][1]) > 0)
 		{
 			g_iYawChangeCount[client]++;
@@ -2810,7 +2750,7 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 	else if((FloatAbs(vel[0]) != fMaxMove && vel[0] != 0.0) || (FloatAbs(vel[1]) != fMaxMove && vel[1] != 0.0))
 	{
 		g_iIllegalSidemoveCount[client]++;
-		
+
 		if(FloatAbs(g_fAngleDifference[client][1]) > 0)
 		{
 			g_iYawChangeCount[client]++;
@@ -2820,14 +2760,14 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 	{
 		g_iIllegalSidemoveCount[client] = 0;
 	}
-	
+
 	if(g_iIllegalSidemoveCount[client] >= 4)
 	{
 		vel[0] = 0.0;
 		vel[1] = 0.0;
 		vel[2] = 0.0;
 	}
-	
+
 	if(g_iIllegalSidemoveCount[client] == 0)
 	{
 		if(g_iLastIllegalSidemoveCount[client] >= 10)
@@ -2837,14 +2777,14 @@ void CheckForIllegalMovement(int client, float vel[3], int buttons)
 			{
 				bBan = true;
 			}
-			
+
 			AnticheatLog(client, "has invalid consecutive movement values, (Joystick = %d, YawChanges = %d/%d) - %s", g_JoyStick[client], g_iYawChangeCount[client], g_iLastIllegalSidemoveCount[client], bBan?"BAN":"SUSPECT");
 			//if(bBan) AutoBanPlayer(client);
 		}
-		
+
 		g_iYawChangeCount[client] = 0;
 	}
-	
+
 	g_iLastIllegalSidemoveCount[client] = g_iIllegalSidemoveCount[client];
 }
 
@@ -2852,7 +2792,7 @@ stock void UpdateButtons(int client, float vel[3], int buttons)
 {
 	g_iLastButtons[client][BT_Move] = g_iButtons[client][BT_Move];
 	g_iButtons[client][BT_Move]     = 0;
-	
+
 	if(vel[0] > 0)
 	{
 		g_iButtons[client][BT_Move] |= (1 << Button_Forward);
@@ -2861,7 +2801,7 @@ stock void UpdateButtons(int client, float vel[3], int buttons)
 	{
 		g_iButtons[client][BT_Move] |= (1 << Button_Back);
 	}
-	
+
 	if(vel[1] > 0)
 	{
 		g_iButtons[client][BT_Move] |= (1 << Button_Right);
@@ -2870,10 +2810,10 @@ stock void UpdateButtons(int client, float vel[3], int buttons)
 	{
 		g_iButtons[client][BT_Move] |= (1 << Button_Left);
 	}
-	
+
 	g_iLastButtons[client][BT_Key] = g_iButtons[client][BT_Key];
 	g_iButtons[client][BT_Key] = 0;
-	
+
 	if(buttons & IN_MOVELEFT)
 	{
 		g_iButtons[client][BT_Key] |= (1 << Button_Left);
@@ -2897,7 +2837,7 @@ void UpdateAngles(int client, float angles[3])
 	for(int i; i < 2; i++)
 	{
 		g_fAngleDifference[client][i] = angles[i] - g_fLastAngles[client][i];
-			
+
 		if (g_fAngleDifference[client][i] > 180)
 			g_fAngleDifference[client][i] -= 360;
 		else if(g_fAngleDifference[client][i] < -180)
@@ -2910,12 +2850,12 @@ stock float FindDegreeAngleFromVectors(float vOldAngle[3], float vNewAngle[3])
 	float deltaX = vOldAngle[1] - vNewAngle[1];
 	float deltaY = vNewAngle[0] - vOldAngle[0];
 	float angleInDegrees = ArcTangent2(deltaX, deltaY) * 180 / FLOAT_PI;
-	
+
 	if(angleInDegrees < 0)
 	{
 		angleInDegrees += 360;
 	}
-	
+
 	return angleInDegrees;
 }
 
@@ -2937,9 +2877,9 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 	}
 	else
 	{
-		
-		
-		if(GetEntityMoveType(client) == MOVETYPE_WALK && 
+
+
+		if(GetEntityMoveType(client) == MOVETYPE_WALK &&
 			GetEntProp(client, Prop_Data, "m_nWaterLevel") < 2 &&
 			!(GetEntityFlags(client) & FL_ATCONTROLS))
 		{
@@ -2950,14 +2890,14 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 			{
 				g_iYawTickCount[client]++;
 			}
-			
+
 			#if defined TIMER
 			if(g_bIsBeingTimed[client])
 			{
 				g_iTimingTickCount[client]++;
 			}
 			#endif
-			
+
 			float gaincoeff;
 			g_strafeTick[client]++;
 			if(g_strafeTick[client] == 1000)
@@ -2965,30 +2905,30 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 				g_flRawGain[client] *= 998.0/999.0;
 				g_strafeTick[client]--;
 			}
-			
+
 			float velocity[3];
 			GetEntPropVector(client, Prop_Data, "m_vecAbsVelocity", velocity);
-			
+
 			float fore[3], side[3], wishvel[3], wishdir[3];
 			float wishspeed, wishspd, currentgain;
-			
+
 			GetAngleVectors(angles, fore, side, NULL_VECTOR);
-			
+
 			fore[2] = 0.0;
 			side[2] = 0.0;
 			NormalizeVector(fore, fore);
 			NormalizeVector(side, side);
-			
+
 			for(int i = 0; i < 2; i++)
 				wishvel[i] = fore[i] * vel[0] + side[i] * vel[1];
-			
+
 			wishspeed = NormalizeVector(wishvel, wishdir);
 			if(wishspeed > GetEntPropFloat(client, Prop_Send, "m_flMaxspeed")) wishspeed = GetEntPropFloat(client, Prop_Send, "m_flMaxspeed");
-			
+
 			if(wishspeed)
 			{
 				wishspd = (wishspeed > 30.0) ? 30.0 : wishspeed;
-				
+
 				currentgain = GetVectorDotProduct(velocity, wishdir);
 				if(currentgain < 30.0)
 					gaincoeff = (wishspd - FloatAbs(currentgain)) / wishspd;
@@ -2997,12 +2937,12 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 					gaincoeff -= 1;
 					gaincoeff = FloatAbs(gaincoeff);
 				}
-				
+
 				if(!g_bTouchesFuncRotating[client])
 				{
 					g_flRawGain[client] += gaincoeff;
 				}
-				
+
 			}
 		}
 		g_iTicksOnGround[client] = 0;
@@ -3018,7 +2958,7 @@ bool IsInLeftRight(int client, int buttons)
 	{
 		return true;
 	}
-	
+
 	return false;
 }
 
@@ -3028,12 +2968,12 @@ float GetGainPercent(int client)
 	{
 		return 0.0;
 	}
-	
+
 	float coeffsum = g_flRawGain[client];
 	coeffsum /= g_strafeTick[client];
 	coeffsum *= 100.0;
 	coeffsum = RoundToFloor(coeffsum * 100.0 + 0.5) / 100.0;
-	
+
 	return coeffsum;
 }
 
@@ -3041,55 +2981,55 @@ int GetDesiredTurnDir(int client, int button, bool opposite)
 {
 	int direction = GetDirection(client);
 	int desiredTurnDir = -1;
-	
+
 	// if holding a and going forward then look for left turn
 	if(button == Button_Left && direction == Moving_Forward)
 	{
 		desiredTurnDir = Turn_Left;
 	}
-	
+
 	// if holding d and going forward then look for right turn
 	else if(button == Button_Right && direction == Moving_Forward)
 	{
 		desiredTurnDir = Turn_Right;
 	}
-	
+
 	// if holding a and going backward then look for right turn
 	else if(button == Button_Left && direction == Moving_Back)
 	{
 		desiredTurnDir = Turn_Right;
 	}
-	
+
 	// if holding d and going backward then look for left turn
 	else if(button == Button_Right && direction == Moving_Back)
 	{
 		desiredTurnDir = Turn_Left;
 	}
-	
+
 	// if holding w and going left then look for right turn
 	else if(button == Button_Forward && direction == Moving_Left)
 	{
 		desiredTurnDir = Turn_Right;
 	}
-	
+
 	// if holding s and going left then look for left turn
 	else if(button == Button_Back && direction == Moving_Left)
 	{
 		desiredTurnDir = Turn_Left;
 	}
-	
+
 	// if holding w and going right then look for left turn
 	else if(button == Button_Forward && direction == Moving_Right)
 	{
 		desiredTurnDir = Turn_Left;
 	}
-	
+
 	// if holding s and going right then look for right turn
 	else if(button == Button_Back && direction == Moving_Right)
 	{
 		desiredTurnDir = Turn_Right;
 	}
-	
+
 	if(opposite == true)
 	{
 		if(desiredTurnDir == Turn_Right)
@@ -3146,7 +3086,7 @@ int GetDesiredButton(int client, int dir)
 			return Button_Back;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -3168,7 +3108,7 @@ int GetOppositeButton(int button)
 	{
 		return Button_Right;
 	}
-	
+
 	return -1;
 }
 
@@ -3176,12 +3116,12 @@ int GetDirection(int client)
 {
 	float vVel[3];
 	GetEntPropVector(client, Prop_Data, "m_vecVelocity", vVel);
-	
+
 	float vAng[3];
 	GetClientEyeAngles(client, vAng);
-   
+
 	float movementDiff = ArcTangent(vVel[1] / vVel[0]) * 180.0 / FLOAT_PI;
-   
+
 	if (vVel[0] < 0.0)
 	{
 		if (vVel[1] > 0.0)
@@ -3212,7 +3152,7 @@ int GetDirection(int client)
 			flipped = false;
 		else
 			flipped = true;
-	   
+
 		movementDiff = FloatAbs(movementDiff - 360.0);
 	}
 
@@ -3286,22 +3226,22 @@ stock void GetMoveDirectionName(int direction, char[] buffer, int maxlength)
 stock float GetClientVelocity(int client, bool UseX, bool UseY, bool UseZ)
 {
 	float vVel[3];
-	
+
 	if(UseX)
 	{
 		vVel[0] = GetEntPropFloat(client, Prop_Send, "m_vecVelocity[0]");
 	}
-	
+
 	if(UseY)
 	{
 		vVel[1] = GetEntPropFloat(client, Prop_Send, "m_vecVelocity[1]");
 	}
-	
+
 	if(UseZ)
 	{
 		vVel[2] = GetEntPropFloat(client, Prop_Send, "m_vecVelocity[2]");
 	}
-	
+
 	return GetVectorLength(vVel);
 }
 #endif
