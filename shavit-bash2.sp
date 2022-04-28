@@ -579,7 +579,17 @@ public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcas
 		{
 			if(gainPct > 85.0 && yawPct < 60.0)
 			{
+				#if defined TIMER
+				char sStyle[32];
+				int style = Shavit_GetBhopStyle(iclient);
+				Shavit_GetStyleStrings(style, sStyleName, g_sStyleStrings[style].sStyleName, sizeof(stylestrings_t::sStyleName));
+				FormatEx(sStyle, sizeof(sStyle), "%s", g_sStyleStrings[style].sStyleName)
+				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％, SPJ: %.1f, Style: %s)", gainPct, yawPct, timingPct, spj, sStyle);
+				#endif
+				
+				#if !defined TIMER
 				AnticheatLog(iclient, "has %.2f％ gains (Yawing %.1f％, Timing: %.1f％, SPJ: %.1f)", gainPct, yawPct, timingPct, spj);
+				#endif
 
 				if(gainPct == 100.0 && timingPct == 100.0)
 				{
