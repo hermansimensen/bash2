@@ -1975,7 +1975,7 @@ void CheckForIllegalTurning(int client, float vel[3])
 	{
 		if(g_iIllegalYawCount[client] > 30 && g_iPlusLeftCount[client] == 0)
 		{
-			//AnticheatLog(client, "is turning with illegal yaw values (m_yaw: %f, sens: %f, m_customaccel: %d, count: %d, m_yaw changes: %d, Joystick: %d)", g_mYaw[client], g_Sensitivity[client], g_mCustomAccel[client], g_iIllegalYawCount[client], g_mYawChangedCount[client], g_JoyStick[client]);
+			AnticheatLog(client, "is turning with illegal yaw values (m_yaw: %f, sens: %f, m_customaccel: %d, count: %d, m_yaw changes: %d, Joystick: %d)", g_mYaw[client], g_Sensitivity[client], g_mCustomAccel[client], g_iIllegalYawCount[client], g_mYawChangedCount[client], g_JoyStick[client]);
 
 			char sValues[256];
 			for(int idx; idx < 20; idx++)
@@ -2407,7 +2407,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 
 	if(g_iStartStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
 	{
-		AnticheatLog(client, "too many perfect strafes in a row (%d)", g_iStartStrafe_PerfCount[client]);
+		AnticheatLog(client, "too many perfect start strafes in a row (%d)", g_iStartStrafe_PerfCount[client]);
 		AutoBanPlayer(client);
 	}
 
@@ -2504,7 +2504,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	if(g_iEndStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
 	{
 		AnticheatLog(client, "too many perfect end strafes in a row (%d)", g_iEndStrafe_PerfCount[client]);
-		//AutoBanPlayer(client);
+		AutoBanPlayer(client);
 	}
 
 	if(g_iEndStrafe_CurrentFrame[client] == 0)
