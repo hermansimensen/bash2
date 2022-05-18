@@ -16,7 +16,7 @@
 #pragma newdecls required
 
 #define BAN_LENGTH "0"
-#define PERFECT_STRAFE_MIN 15
+#define IDENTICAL_STRAFE_MIN 20
 
 public Plugin myinfo =
 {
@@ -135,13 +135,15 @@ bool  g_JoyStick[MAXPLAYERS + 1]; int g_JoyStickChangedCount[MAXPLAYERS + 1]; in
 int   g_iStartStrafe_CurrentFrame[MAXPLAYERS + 1];
 any   g_iStartStrafe_Stats[MAXPLAYERS + 1][7][MAX_FRAMES];
 int   g_iStartStrafe_LastRecordedTick[MAXPLAYERS + 1];
+int   g_iStartStrafe_LastTickDifference[MAXPLAYERS + 1];
 bool  g_bStartStrafe_IsRecorded[MAXPLAYERS + 1][MAX_FRAMES];
-int   g_iStartStrafe_PerfCount[MAXPLAYERS + 1];
+int   g_iStartStrafe_IdenticalCount[MAXPLAYERS + 1];
 int   g_iEndStrafe_CurrentFrame[MAXPLAYERS + 1];
 any   g_iEndStrafe_Stats[MAXPLAYERS + 1][7][MAX_FRAMES];
 int   g_iEndStrafe_LastRecordedTick[MAXPLAYERS + 1];
+int   g_iEndStrafe_LastTickDifference[MAXPLAYERS + 1];
 bool  g_bEndStrafe_IsRecorded[MAXPLAYERS + 1][MAX_FRAMES];
-int   g_iEndStrafe_PerfCount[MAXPLAYERS + 1];
+int   g_iEndStrafe_IdenticalCount[MAXPLAYERS + 1];
 int   g_iKeySwitch_CurrentFrame[MAXPLAYERS + 1][2];
 any   g_iKeySwitch_Stats[MAXPLAYERS + 1][3][2][MAX_FRAMES_KEYSWITCH];
 bool  g_bKeySwitch_IsRecorded[MAXPLAYERS + 1][2][MAX_FRAMES_KEYSWITCH];
@@ -247,8 +249,9 @@ enum struct fuck_sourcemod
 	any   g_iStartStrafe_Stats_6[MAX_FRAMES];
 
 	int   g_iStartStrafe_LastRecordedTick;
+	int   g_iStartStrafe_LastTickDifference;
 	bool  g_bStartStrafe_IsRecorded[MAX_FRAMES];
-	int   g_iStartStrafe_PerfCount;
+	int   g_iStartStrafe_IdenticalCount;
 	int   g_iEndStrafe_CurrentFrame;
 
 	//any   g_iEndStrafe_Stats[7][MAX_FRAMES];
@@ -261,8 +264,9 @@ enum struct fuck_sourcemod
 	any   g_iEndStrafe_Stats_6[MAX_FRAMES];
 
 	int   g_iEndStrafe_LastRecordedTick;
+	int   g_iEndStrafe_LastTickDifference;
 	bool  g_bEndStrafe_IsRecorded[MAX_FRAMES];
-	int   g_iEndStrafe_PerfCount;
+	int   g_iEndStrafe_IdenticalCount;
 	int   g_iKeySwitch_CurrentFrame[2];
 
 	//any   g_iKeySwitch_Stats[3][2][MAX_FRAMES_KEYSWITCH];
@@ -691,8 +695,10 @@ public void OnClientConnected(int client)
 	g_iKeySwitch_CurrentFrame[client][BT_Key]  = 0;
 	g_iKeySwitch_CurrentFrame[client][BT_Move] = 0;
 	g_bCheckedYet[client] = false;
-	g_iStartStrafe_PerfCount[client] = 0;
-	g_iEndStrafe_PerfCount[client]   = 0;
+	g_iStartStrafe_LastTickDifference[client] = 0;
+	g_iEndStrafe_LastTickDifference[client] = 0;
+	g_iStartStrafe_IdenticalCount[client] = 0;
+	g_iEndStrafe_IdenticalCount[client]   = 0;
 
 	g_iYawSpeed[client] = 210.0;
 	g_mYaw[client] = 0.0;
@@ -827,8 +833,9 @@ public void OnClientPostAdminCheck(int client)
 		g_iStartStrafe_Stats[client][6] = x.g_iStartStrafe_Stats_6;
 
 		g_iStartStrafe_LastRecordedTick[client] = x.g_iStartStrafe_LastRecordedTick;
+		g_iStartStrafe_LastTickDifference[client] = x.g_iStartStrafe_LastTickDifference;
 		g_bStartStrafe_IsRecorded[client] = x.g_bStartStrafe_IsRecorded;
-		g_iStartStrafe_PerfCount[client] = x.g_iStartStrafe_PerfCount;
+		g_iStartStrafe_IdenticalCount[client] = x.g_iStartStrafe_IdenticalCount;
 
 		g_iEndStrafe_CurrentFrame[client] = x.g_iEndStrafe_CurrentFrame;
 
@@ -841,8 +848,9 @@ public void OnClientPostAdminCheck(int client)
 		g_iEndStrafe_Stats[client][6] = x.g_iEndStrafe_Stats_6;
 
 		g_iEndStrafe_LastRecordedTick[client] = x.g_iEndStrafe_LastRecordedTick;
+		g_iEndStrafe_LastTickDifference[client] = x.g_iEndStrafe_LastTickDifference;
 		g_bEndStrafe_IsRecorded[client] = x.g_bEndStrafe_IsRecorded;
-		g_iEndStrafe_PerfCount[client] = x.g_iEndStrafe_PerfCount;
+		g_iEndStrafe_IdenticalCount[client] = x.g_iEndStrafe_IdenticalCount;
 		g_iKeySwitch_CurrentFrame[client] = x.g_iKeySwitch_CurrentFrame;
 
 		g_iKeySwitch_Stats[client][0][0] = x.g_iKeySwitch_Stats_0_0;
@@ -970,8 +978,9 @@ public void OnClientDisconnect(int client)
 		x.g_iStartStrafe_Stats_6 = g_iStartStrafe_Stats[client][6];
 
 		x.g_iStartStrafe_LastRecordedTick = g_iStartStrafe_LastRecordedTick[client];
+		x.g_iStartStrafe_LastTickDifference = g_iStartStrafe_LastTickDifference[client];
 		x.g_bStartStrafe_IsRecorded = g_bStartStrafe_IsRecorded[client];
-		x.g_iStartStrafe_PerfCount = g_iStartStrafe_PerfCount[client];
+		x.g_iStartStrafe_IdenticalCount = g_iStartStrafe_IdenticalCount[client];
 
 		x.g_iEndStrafe_CurrentFrame = g_iEndStrafe_CurrentFrame[client];
 
@@ -984,8 +993,9 @@ public void OnClientDisconnect(int client)
 		x.g_iEndStrafe_Stats_6 = g_iEndStrafe_Stats[client][6];
 
 		x.g_iEndStrafe_LastRecordedTick = g_iEndStrafe_LastRecordedTick[client];
+		x.g_iEndStrafe_LastTickDifference = g_iEndStrafe_LastTickDifference[client];
 		x.g_bEndStrafe_IsRecorded = g_bEndStrafe_IsRecorded[client];
-		x.g_iEndStrafe_PerfCount = g_iEndStrafe_PerfCount[client];
+		x.g_iEndStrafe_IdenticalCount = g_iEndStrafe_IdenticalCount[client];
 		x.g_iKeySwitch_CurrentFrame = g_iKeySwitch_CurrentFrame[client];
 
 		x.g_iKeySwitch_Stats_0_0 = g_iKeySwitch_Stats[client][0][0];
@@ -2385,20 +2395,31 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	#endif
 	g_bStartStrafe_IsRecorded[client][currFrame] = true;
 	g_iStartStrafe_CurrentFrame[client] = (g_iStartStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
-
-	if(g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame] == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
+	
+	
+	if(g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame] == g_iStartStrafe_LastTickDifference[client] && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
-		g_iStartStrafe_PerfCount[client]++;
+		g_iStartStrafe_IdenticalCount[client]++;
+	}
+	else if (g_iStartStrafe_IdenticalCount[client] >= IDENTICAL_STRAFE_MIN)
+	{	
+		AnticheatLog(client, "too many %i strafes in a row (%d)", g_iStartStrafe_LastTickDifference[client], g_iStartStrafe_IdenticalCount[client]);
+		//AutoBanPlayer(client);
+		
+		g_iStartStrafe_LastTickDifference[client] = g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame];
+		g_iStartStrafe_IdenticalCount[client] = 0;
+	}
+	else if(g_iStartStrafe_IdenticalCount[client] >= 10)
+	{
+		AnticheatLog(client, "had %i strafes in a row (%d)", g_iStartStrafe_LastTickDifference[client], g_iStartStrafe_IdenticalCount[client]);
+		
+		g_iStartStrafe_LastTickDifference[client] = g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame];
+		g_iStartStrafe_IdenticalCount[client] = 0;
 	}
 	else
 	{
-		g_iStartStrafe_PerfCount[client] = 0;
-	}
-
-	if(g_iStartStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
-	{
-		AnticheatLog(client, "too many perfect start strafes in a row (%d)", g_iStartStrafe_PerfCount[client]);
-		AutoBanPlayer(client);
+		g_iStartStrafe_LastTickDifference[client] = g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame];
+		g_iStartStrafe_IdenticalCount[client] = 0;
 	}
 
 	if(g_iStartStrafe_CurrentFrame[client] == 0)
@@ -2481,20 +2502,30 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	g_bEndStrafe_IsRecorded[client][currFrame]                   = true;
 	g_iEndStrafe_Stats[client][StrafeData_Tick][currFrame]       = g_iCmdNum[client];
 	g_iEndStrafe_CurrentFrame[client] = (g_iEndStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
-
-	if(g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame] == 0 && !IsInLeftRight(client, g_iRealButtons[client]))
+	
+	if(g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame] == g_iEndStrafe_LastTickDifference[client] && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
-		g_iEndStrafe_PerfCount[client]++;
+		g_iEndStrafe_IdenticalCount[client]++;
+	}
+	else if (g_iEndStrafe_IdenticalCount[client] >= IDENTICAL_STRAFE_MIN)
+	{	
+		AnticheatLog(client, "too many %i strafes in a row (%d)", g_iEndStrafe_LastTickDifference[client], g_iEndStrafe_IdenticalCount[client]);
+		AutoBanPlayer(client);
+		
+		g_iEndStrafe_LastTickDifference[client] = g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame];
+		g_iEndStrafe_IdenticalCount[client] = 0;
+	}
+	else if(g_iEndStrafe_IdenticalCount[client] >= 10)
+	{
+		AnticheatLog(client, "had %i strafes in a row (%d)", g_iEndStrafe_LastTickDifference[client], g_iEndStrafe_IdenticalCount[client]);
+		
+		g_iEndStrafe_LastTickDifference[client] = g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame];
+		g_iEndStrafe_IdenticalCount[client] = 0;
 	}
 	else
 	{
-		g_iEndStrafe_PerfCount[client] = 0;
-	}
-
-	if(g_iEndStrafe_PerfCount[client] >= PERFECT_STRAFE_MIN)
-	{
-		AnticheatLog(client, "too many perfect end strafes in a row (%d)", g_iEndStrafe_PerfCount[client]);
-		AutoBanPlayer(client);
+		g_iEndStrafe_LastTickDifference[client] = g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame];
+		g_iEndStrafe_IdenticalCount[client] = 0;
 	}
 
 	if(g_iEndStrafe_CurrentFrame[client] == 0)
