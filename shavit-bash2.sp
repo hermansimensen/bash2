@@ -2411,7 +2411,7 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	}
 	else if(g_iStartStrafe_IdenticalCount[client] >= 10)
 	{
-		AnticheatLog(client, "had %i strafes in a row (%d)", g_iStartStrafe_LastTickDifference[client], g_iStartStrafe_IdenticalCount[client]);
+		AnticheatLog(client, "too many %i strafes in a row (%d)", g_iStartStrafe_LastTickDifference[client], g_iStartStrafe_IdenticalCount[client]);
 		
 		g_iStartStrafe_LastTickDifference[client] = g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame];
 		g_iStartStrafe_IdenticalCount[client] = 0;
@@ -2517,7 +2517,7 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	}
 	else if(g_iEndStrafe_IdenticalCount[client] >= 10)
 	{
-		AnticheatLog(client, "had %i strafes in a row (%d)", g_iEndStrafe_LastTickDifference[client], g_iEndStrafe_IdenticalCount[client]);
+		AnticheatLog(client, "too many %i strafes in a row (%d)", g_iEndStrafe_LastTickDifference[client], g_iEndStrafe_IdenticalCount[client]);
 		
 		g_iEndStrafe_LastTickDifference[client] = g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame];
 		g_iEndStrafe_IdenticalCount[client] = 0;
