@@ -4,7 +4,6 @@
 #include <sdktools>
 #include <cstrike>
 #include <sdkhooks>
-#include <smlib/entities>
 
 #if defined TIMER
 #include <shavit>
@@ -191,7 +190,7 @@ char g_sPlayerIp[MAXPLAYERS + 1][16];
 //shavit
 
 #if defined TIMER
-stylesettings_t g_aStyleSettings[STYLE_LIMIT];
+// stylesettings_t g_aStyleSettings[STYLE_LIMIT];
 stylestrings_t g_sStyleStrings[STYLE_LIMIT];
 bool  g_bIsBeingTimed[MAXPLAYERS +1];
 #endif
@@ -672,10 +671,11 @@ public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, i
 {
 	#if defined TIMER
 	int style = Shavit_GetBhopStyle(entity);
-	Shavit_GetStyleSettings(style, g_aStyleSettings[style]);
-	
-	if(g_aStyleSettings[style].bAutobhop == false)
+	if(Shavit_GetStyleSettingBool(style, "autobhop"))
 		iValue &= ~FL_ONGROUND;
+
+	// if(g_aStyleSettings[style].bAutobhop == false)
+	// 	iValue &= ~FL_ONGROUND;
 	
 	return Plugin_Changed;
 	#endif
@@ -1564,7 +1564,9 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		g_fLastAngles[client][0] = angles[0];
 		g_fLastAngles[client][1] = angles[1];
 		g_fLastAngles[client][2] = angles[2];
-		Entity_GetAbsOrigin(client, g_fLastPosition[client]);
+		// Entity_GetAbsOrigin(client, g_fLastPosition[client]);
+		// GetClientAbsOrigin(client,)
+		GetEntPropVector(client, Prop_Send, "m_vecOrigin", g_fLastPosition[client]);
 		g_fLastAngleDifference[client][0] = g_fAngleDifference[client][0];
 		g_fLastAngleDifference[client][1] = g_fAngleDifference[client][1];
 		g_iCmdNum[client]++;
@@ -1845,7 +1847,9 @@ void ClientPressedKey(int client, int button, int btype)
 void CheckForTeleport(int client)
 {
 	float vPos[3];
-	Entity_GetAbsOrigin(client, vPos);
+	// Entity_GetAbsOrigin(client, vPos);
+	GetEntPropVector(client, Prop_Send, "m_vecOrigin", vPos);
+
 			   
 	float distance = SquareRoot(Pow(vPos[0] - g_fLastPosition[client][0], 2.0) + 
 								Pow(vPos[1] - g_fLastPosition[client][1], 2.0) + 
