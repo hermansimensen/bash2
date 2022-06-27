@@ -306,6 +306,7 @@ Handle g_fwdOnClientBanned;
 ConVar g_hBanLength;
 char   g_sBanLength[32];
 ConVar g_hAntiNull;
+ConVar g_hPrintNullLogs;
 ConVar g_hAutoban;
 bool g_bAdminMode[MAXPLAYERS + 1];
 ConVar g_hQueryRate;
@@ -338,6 +339,7 @@ public void OnPluginStart()
 	g_hAutoban = CreateConVar("bash_autoban", "1", "Auto ban players who are detected", _, true, 0.0, true, 1.0);
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
+	g_hPrintNullLogs = CreateConVar("bash_print_null_logs", "0", "Should null logs be print to chat?", _, true, 0.0, true, 1.0);
 	g_hQueryRate = CreateConVar("bash_query_rate", "0.2", "How often will convars be queried from the client?", _, true, 0.1, true, 2.0);
 	g_hPersistentData = CreateConVar("bash_persistent_data", "1", "Whether to save and reload strafe stats on a map for players when they disconnect.\nThis is useful to prevent people from frequently rejoining to wipe their strafe stats.", _, true, 0.0, true, 1.0);
 	AutoExecConfig(true, "bash", "sourcemod");
@@ -559,6 +561,11 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 	Call_PushCell(client);
 	Call_PushString(buffer);
 	Call_Finish();
+
+	if (!g_hPrintNullLogs.BoolValue && StrContains(buffer, "nullPct") != -1)
+	{
+		return;
+	}
 
 	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp[client], buffer);
 }
@@ -2395,12 +2402,12 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	#endif
 	g_bStartStrafe_IsRecorded[client][currFrame] = true;
 	g_iStartStrafe_CurrentFrame[client] = (g_iStartStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
-	
-	
+
+
 	if(g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame] == g_iStartStrafe_LastTickDifference[client] && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
 		g_iStartStrafe_IdenticalCount[client]++;
-		
+
 		if (g_iStartStrafe_IdenticalCount[client] >= IDENTICAL_STRAFE_MIN)
 		{
 			AnticheatLog(client, "too many %i strafes in a row (%d)", g_iStartStrafe_LastTickDifference[client], g_iStartStrafe_IdenticalCount[client]);
@@ -2410,10 +2417,10 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 	else
 	{
 		if (g_iStartStrafe_IdenticalCount[client] >= 15 && g_iStartStrafe_IdenticalCount[client] < IDENTICAL_STRAFE_MIN)
-		{	
+		{
 			AnticheatLog(client, "too many %i strafes in a row (%d)", g_iStartStrafe_LastTickDifference[client], g_iStartStrafe_IdenticalCount[client]);
 		}
-		
+
 		g_iStartStrafe_LastTickDifference[client] = g_iStartStrafe_Stats[client][StrafeData_Difference][currFrame];
 		g_iStartStrafe_IdenticalCount[client] = 0;
 	}
@@ -2498,11 +2505,11 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	g_bEndStrafe_IsRecorded[client][currFrame]                   = true;
 	g_iEndStrafe_Stats[client][StrafeData_Tick][currFrame]       = g_iCmdNum[client];
 	g_iEndStrafe_CurrentFrame[client] = (g_iEndStrafe_CurrentFrame[client] + 1) % MAX_FRAMES;
-	
+
 	if(g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame] == g_iEndStrafe_LastTickDifference[client] && !IsInLeftRight(client, g_iRealButtons[client]))
 	{
 		g_iEndStrafe_IdenticalCount[client]++;
-		
+
 		if (g_iEndStrafe_IdenticalCount[client] >= IDENTICAL_STRAFE_MIN)
 		{
 			AnticheatLog(client, "too many %i strafes in a row (%d)", g_iEndStrafe_LastTickDifference[client], g_iEndStrafe_IdenticalCount[client]);
@@ -2512,10 +2519,10 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 	else
 	{
 		if (g_iEndStrafe_IdenticalCount[client] >= 15 && g_iEndStrafe_IdenticalCount[client] < IDENTICAL_STRAFE_MIN)
-		{	
+		{
 			AnticheatLog(client, "too many %i strafes in a row (%d)", g_iEndStrafe_LastTickDifference[client], g_iEndStrafe_IdenticalCount[client]);
 		}
-		
+
 		g_iEndStrafe_LastTickDifference[client] = g_iEndStrafe_Stats[client][StrafeData_Difference][currFrame];
 		g_iEndStrafe_IdenticalCount[client] = 0;
 	}
