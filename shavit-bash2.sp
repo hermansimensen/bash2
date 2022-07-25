@@ -555,19 +555,20 @@ stock bool AnticheatLog(int client, const char[] log, any ...)
 {
 	char buffer[1024];
 	VFormat(buffer, sizeof(buffer), log, 3);
-	PrintToAdmins("%N %s", client, buffer);
 
 	Call_StartForward(g_fwdOnDetection);
 	Call_PushCell(client);
 	Call_PushString(buffer);
 	Call_Finish();
 
+	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp[client], buffer);
+
 	if (!g_hPrintNullLogs.BoolValue && StrContains(buffer, "nullPct") != -1)
 	{
 		return;
 	}
 
-	LogToFile(g_aclogfile, "%L<%s> %s", client, g_sPlayerIp[client], buffer);
+	PrintToAdmins("%N %s", client, buffer);
 }
 
 public Action Event_PlayerJump(Event event, const char[] name, bool dontBroadcast)
