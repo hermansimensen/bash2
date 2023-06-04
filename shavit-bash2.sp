@@ -308,6 +308,7 @@ char   g_sBanLength[32];
 ConVar g_hAntiNull;
 ConVar g_hPrintNullLogs;
 ConVar g_hAutoban;
+ConVar g_hAutobanDevThreshold;
 bool g_bAdminMode[MAXPLAYERS + 1];
 ConVar g_hQueryRate;
 ConVar g_hPersistentData;
@@ -337,6 +338,7 @@ public void OnPluginStart()
 
 	g_hBanLength = CreateConVar("bash_banlength", "0", "Ban length for the automated bans", _, true, 0.0);
 	g_hAutoban = CreateConVar("bash_autoban", "1", "Auto ban players who are detected", _, true, 0.0, true, 1.0);
+	g_hAutobanDevThreshold = CreateConVar("bash_autoban_dev_threshold", "0.4", "The minimum value to auto ban from dev logs", _, true, 0.0, true, 1.0)
 	HookConVarChange(g_hBanLength, OnBanLengthChanged);
 	g_hAntiNull = CreateConVar("bash_antinull", "0", "Punish for null movement stats", _, true, 0.0, true, 1.0);
 	g_hPrintNullLogs = CreateConVar("bash_print_null_logs", "0", "Should null logs be print to chat?", _, true, 0.0, true, 1.0);
@@ -2458,9 +2460,9 @@ stock void RecordStartStrafe(int client, int button, int turnDir, const char[] c
 			AnticheatLog(client, "start strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
 
 			#if defined TIMER
-			if(sd <= 0.4 && timingPct == 1.0)
+			if(sd <= g_hAutobanDevThreshold.FloatValue && timingPct == 1.0)
 			#else
-			if(sd <= 0.4)
+			if(sd <= g_hAutobanDevThreshold.FloatValue)
 			#endif
 			{
 				AutoBanPlayer(client);
@@ -2560,9 +2562,9 @@ stock void RecordEndStrafe(int client, int button, int turnDir, const char[] cal
 			AnticheatLog(client, "end strafe, avg: %.2f, dev: %.2f, Timing: %.1f％, style: %s", mean, sd, timingPct * 100, sStyle);
 
 			#if defined TIMER
-			if(sd <= 0.4 && timingPct == 1.0)
+			if(sd <= g_hAutobanDevThreshold.FloatValue && timingPct == 1.0)
 			#else
-			if(sd <= 0.4)
+			if(sd <= g_hAutobanDevThreshold.FloatValue)
 			#endif
 			{
 				AutoBanPlayer(client);
