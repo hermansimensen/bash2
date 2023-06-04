@@ -16,6 +16,7 @@ bash2_test  - trigger a test message so you can know if webhooks are working :)
 bash_antinull - lets you disable or enable null kicking
 bash_banlength - lets you set banlength
 bash_autoban - disable/enable automatic banning.
+bash_autoban_dev_threshold - change the autoban dev threshold (any dev log under this will be autobanned)
 bash_persistent_data - Saves and reload strafe stats on player rejoin.
 ```
 
