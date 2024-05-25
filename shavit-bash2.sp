@@ -1043,22 +1043,111 @@ public Action Hook_GroundFlags(int entity, const char[] PropName, int &iValue, i
 	#endif
 }
 
+//this fixes client disconnects due to QueryForCvars overflowing the reliable stream during network interruption
+#define MAX_CONVARS 12
+
+enum
+{
+    CONVAR_YAWSPEED,
+    CONVAR_YAW,
+    CONVAR_FILTER,
+    CONVAR_CUSTOMACCEL,
+    CONVAR_CUSTOMACCEL_MAX,
+    CONVAR_CUSTOMACCEL_SCALE,
+    CONVAR_CUSTOMACCEL_EXPONENT,
+    CONVAR_RAWINPUT,
+    CONVAR_SENSITIVITY,
+    CONVAR_YAWSENSITIVITY,
+    CONVAR_JOYSTICK,
+    CONVAR_ZOOMSENSITIVITY
+};
+
+bool g_bQueryPending[MAXPLAYERS + 1][MAX_CONVARS]; // track pending queries... 
 
 void QueryForCvars(int client)
 {
-	if(g_Engine == Engine_CSS) QueryClientConVar(client, "cl_yawspeed", OnYawSpeedRetrieved);
-	QueryClientConVar(client, "m_yaw", OnYawRetrieved);
-	QueryClientConVar(client, "m_filter", OnFilterRetrieved);
-	QueryClientConVar(client, "m_customaccel", OnCustomAccelRetrieved);
-	QueryClientConVar(client, "m_customaccel_max", OnCustomAccelMaxRetrieved);
-	QueryClientConVar(client, "m_customaccel_scale", OnCustomAccelScaleRetrieved);
-	QueryClientConVar(client, "m_customaccel_exponent", OnCustomAccelExRetrieved);
-	QueryClientConVar(client, "m_rawinput", OnRawInputRetrieved);
-	QueryClientConVar(client, "sensitivity", OnSensitivityRetrieved);
-	QueryClientConVar(client, "joy_yawsensitivity", OnYawSensitivityRetrieved);
-	QueryClientConVar(client, "joystick", OnJoystickRetrieved);
-	if(g_Engine == Engine_CSGO) QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnZoomSensitivityRetrieved);
-	if(g_Engine == Engine_CSS) QueryClientConVar(client, "zoom_sensitivity_ratio", OnZoomSensitivityRetrieved);
+	if (g_Engine == Engine_CSS && !g_bQueryPending[client][CONVAR_YAWSPEED])
+	{
+		QueryClientConVar(client, "cl_yawspeed", OnYawSpeedRetrieved);
+		g_bQueryPending[client][CONVAR_YAWSPEED] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_YAW])
+	{
+		QueryClientConVar(client, "m_yaw", OnYawRetrieved);
+		g_bQueryPending[client][CONVAR_YAW] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_FILTER])
+	{
+		QueryClientConVar(client, "m_filter", OnFilterRetrieved);
+		g_bQueryPending[client][CONVAR_FILTER] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL])
+	{
+		QueryClientConVar(client, "m_customaccel", OnCustomAccelRetrieved);
+		g_bQueryPending[client][CONVAR_CUSTOMACCEL] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_MAX])
+	{
+		QueryClientConVar(client, "m_customaccel_max", OnCustomAccelMaxRetrieved);
+		g_bQueryPending[client][CONVAR_CUSTOMACCEL_MAX] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_SCALE])
+	{
+		QueryClientConVar(client, "m_customaccel_scale", OnCustomAccelScaleRetrieved);
+		g_bQueryPending[client][CONVAR_CUSTOMACCEL_SCALE] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_EXPONENT])
+	{
+		QueryClientConVar(client, "m_customaccel_exponent", OnCustomAccelExRetrieved);
+		g_bQueryPending[client][CONVAR_CUSTOMACCEL_EXPONENT] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_RAWINPUT])
+	{
+		QueryClientConVar(client, "m_rawinput", OnRawInputRetrieved);
+		g_bQueryPending[client][CONVAR_RAWINPUT] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_SENSITIVITY])
+	{
+		QueryClientConVar(client, "sensitivity", OnSensitivityRetrieved);
+		g_bQueryPending[client][CONVAR_SENSITIVITY] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_YAWSENSITIVITY])
+	{
+		QueryClientConVar(client, "joy_yawsensitivity", OnYawSensitivityRetrieved);
+		g_bQueryPending[client][CONVAR_YAWSENSITIVITY] = true;
+	}
+
+	if (!g_bQueryPending[client][CONVAR_JOYSTICK])
+	{
+		QueryClientConVar(client, "joystick", OnJoystickRetrieved);
+		g_bQueryPending[client][CONVAR_JOYSTICK] = true;
+	}
+
+	if (g_Engine == Engine_CSGO && !g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY])
+	{ 
+		QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnZoomSensitivityRetrieved);
+		g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY] = true;
+	}
+
+	if (g_Engine == Engine_CSS && !g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY]) 
+	{
+		QueryClientConVar(client, "zoom_sensitivity_ratio", OnZoomSensitivityRetrieved);
+		g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY] = true;
+	}
+}
+
+public void SimulateConVarQueryCompleted(int client, int convar)
+{
+    g_bQueryPending[client][convar] = false;
 }
 
 public void OnYawSpeedRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1069,6 +1158,8 @@ public void OnYawSpeedRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 	{
 		KickClient(client, "cl_yawspeed cannot be negative");
 	}
+
+	SimulateConVarQueryCompleted(client, CONVAR_YAWSPEED);
 }
 
 public void OnYawRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1087,6 +1178,7 @@ public void OnYawRetrieved(QueryCookie cookie, int client, ConVarQueryResult res
 	}
 
 	g_mYawCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_YAW);
 }
 
 public void OnFilterRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1105,6 +1197,7 @@ public void OnFilterRetrieved(QueryCookie cookie, int client, ConVarQueryResult 
 	}
 
 	g_mFilterCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_FILTER);
 }
 
 public void OnCustomAccelRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1124,6 +1217,7 @@ public void OnCustomAccelRetrieved(QueryCookie cookie, int client, ConVarQueryRe
 	}
 
 	g_mCustomAccelCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_CUSTOMACCEL);
 }
 
 public void OnCustomAccelMaxRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1142,6 +1236,7 @@ public void OnCustomAccelMaxRetrieved(QueryCookie cookie, int client, ConVarQuer
 	}
 
 	g_mCustomAccelMaxCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_CUSTOMACCEL_MAX);
 }
 
 public void OnCustomAccelScaleRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1161,6 +1256,7 @@ public void OnCustomAccelScaleRetrieved(QueryCookie cookie, int client, ConVarQu
 	}
 
 	g_mCustomAccelScaleCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_CUSTOMACCEL_SCALE);
 }
 
 public void OnCustomAccelExRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1180,6 +1276,7 @@ public void OnCustomAccelExRetrieved(QueryCookie cookie, int client, ConVarQuery
 	}
 
 	g_mCustomAccelExponentCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_CUSTOMACCEL_EXPONENT);
 }
 
 public void OnRawInputRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1198,6 +1295,7 @@ public void OnRawInputRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 	}
 
 	g_mRawInputCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_RAWINPUT);
 }
 
 public void OnSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1216,6 +1314,7 @@ public void OnSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryRe
 	}
 
 	g_SensitivityCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_SENSITIVITY);
 }
 
 public void OnYawSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1234,6 +1333,7 @@ public void OnYawSensitivityRetrieved(QueryCookie cookie, int client, ConVarQuer
 	}
 
 	g_JoySensitivityCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_YAWSENSITIVITY);
 }
 
 public void OnZoomSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1252,6 +1352,7 @@ public void OnZoomSensitivityRetrieved(QueryCookie cookie, int client, ConVarQue
 	}
 
 	g_ZoomSensitivityCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_ZOOMSENSITIVITY);
 }
 
 public void OnJoystickRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1270,6 +1371,7 @@ public void OnJoystickRetrieved(QueryCookie cookie, int client, ConVarQueryResul
 	}
 
 	g_JoyStickCheckedCount[client]++;
+	SimulateConVarQueryCompleted(client, CONVAR_JOYSTICK);
 }
 
 
