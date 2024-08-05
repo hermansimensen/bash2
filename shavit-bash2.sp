@@ -1066,83 +1066,56 @@ bool g_bQueryPending[MAXPLAYERS + 1][MAX_CONVARS]; // track pending queries...
 
 void QueryForCvars(int client)
 {
-	if (g_Engine == Engine_CSS && !g_bQueryPending[client][CONVAR_YAWSPEED])
-	{
-		QueryClientConVar(client, "cl_yawspeed", OnYawSpeedRetrieved);
-		g_bQueryPending[client][CONVAR_YAWSPEED] = true;
-	}
+    // Always query these cvars
+    if (!g_bQueryPending[client][CONVAR_YAW])
+    {
+        QueryClientConVar(client, "m_yaw", OnYawRetrieved);
+        g_bQueryPending[client][CONVAR_YAW] = true;
+    }
 
-	if (!g_bQueryPending[client][CONVAR_YAW])
-	{
-		QueryClientConVar(client, "m_yaw", OnYawRetrieved);
-		g_bQueryPending[client][CONVAR_YAW] = true;
-	}
+    if (!g_bQueryPending[client][CONVAR_SENSITIVITY])
+    {
+        QueryClientConVar(client, "sensitivity", OnSensitivityRetrieved);
+        g_bQueryPending[client][CONVAR_SENSITIVITY] = true;
+    }
 
-	if (!g_bQueryPending[client][CONVAR_FILTER])
-	{
-		QueryClientConVar(client, "m_filter", OnFilterRetrieved);
-		g_bQueryPending[client][CONVAR_FILTER] = true;
-	}
+    if (!g_bQueryPending[client][CONVAR_JOYSTICK])
+    {
+        QueryClientConVar(client, "joystick", OnJoystickRetrieved);
+        g_bQueryPending[client][CONVAR_JOYSTICK] = true;
+    }
 
-	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL])
-	{
-		QueryClientConVar(client, "m_customaccel", OnCustomAccelRetrieved);
-		g_bQueryPending[client][CONVAR_CUSTOMACCEL] = true;
-	}
+    if (!g_bQueryPending[client][CONVAR_RAWINPUT])
+    {
+        QueryClientConVar(client, "m_rawinput", OnRawInputRetrieved);
+        g_bQueryPending[client][CONVAR_RAWINPUT] = true;
+    }
 
-	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_MAX])
-	{
-		QueryClientConVar(client, "m_customaccel_max", OnCustomAccelMaxRetrieved);
-		g_bQueryPending[client][CONVAR_CUSTOMACCEL_MAX] = true;
-	}
+    if (g_Engine == Engine_CSS)
+    {
+        if (!g_bQueryPending[client][CONVAR_YAWSPEED])
+        {
+            QueryClientConVar(client, "cl_yawspeed", OnYawSpeedRetrieved);
+            g_bQueryPending[client][CONVAR_YAWSPEED] = true;
+        }
 
-	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_SCALE])
-	{
-		QueryClientConVar(client, "m_customaccel_scale", OnCustomAccelScaleRetrieved);
-		g_bQueryPending[client][CONVAR_CUSTOMACCEL_SCALE] = true;
-	}
+        if (!g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY])
+        {
+            QueryClientConVar(client, "zoom_sensitivity_ratio", OnZoomSensitivityRetrieved);
+            g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY] = true;
+        }
+    }
+    else if (g_Engine == Engine_CSGO)
+    {
+        if (!g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY])
+        {
+            QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnZoomSensitivityRetrieved);
+            g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY] = true;
+        }
+    }
 
-	if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_EXPONENT])
-	{
-		QueryClientConVar(client, "m_customaccel_exponent", OnCustomAccelExRetrieved);
-		g_bQueryPending[client][CONVAR_CUSTOMACCEL_EXPONENT] = true;
-	}
-
-	if (!g_bQueryPending[client][CONVAR_RAWINPUT])
-	{
-		QueryClientConVar(client, "m_rawinput", OnRawInputRetrieved);
-		g_bQueryPending[client][CONVAR_RAWINPUT] = true;
-	}
-
-	if (!g_bQueryPending[client][CONVAR_SENSITIVITY])
-	{
-		QueryClientConVar(client, "sensitivity", OnSensitivityRetrieved);
-		g_bQueryPending[client][CONVAR_SENSITIVITY] = true;
-	}
-
-	if (!g_bQueryPending[client][CONVAR_YAWSENSITIVITY])
-	{
-		QueryClientConVar(client, "joy_yawsensitivity", OnYawSensitivityRetrieved);
-		g_bQueryPending[client][CONVAR_YAWSENSITIVITY] = true;
-	}
-
-	if (!g_bQueryPending[client][CONVAR_JOYSTICK])
-	{
-		QueryClientConVar(client, "joystick", OnJoystickRetrieved);
-		g_bQueryPending[client][CONVAR_JOYSTICK] = true;
-	}
-
-	if (g_Engine == Engine_CSGO && !g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY])
-	{ 
-		QueryClientConVar(client, "zoom_sensitivity_ratio_mouse", OnZoomSensitivityRetrieved);
-		g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY] = true;
-	}
-
-	if (g_Engine == Engine_CSS && !g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY]) 
-	{
-		QueryClientConVar(client, "zoom_sensitivity_ratio", OnZoomSensitivityRetrieved);
-		g_bQueryPending[client][CONVAR_ZOOMSENSITIVITY] = true;
-	}
+    // Note: m_ queries that do nothing with m_rawinput 1 are now only called if m_rawinput is 0, and are handled in the OnRawInputRetrieved callback.
+    // joy_yawsensitivity is only queried if joystick is not 0 and it is handled in the OnJoystickRetrieved callback.
 }
 
 public void SimulateConVarQueryCompleted(int client, int convar)
@@ -1281,21 +1254,50 @@ public void OnCustomAccelExRetrieved(QueryCookie cookie, int client, ConVarQuery
 
 public void OnRawInputRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
-	bool mRawInput = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
-	if(mRawInput != g_mRawInput[client])
-	{
-		g_mRawInputChangedCount[client]++;
-		g_mRawInput[client] = mRawInput;
+    bool mRawInput = (0.0 <= StringToFloat(cvarValue) < 1.0) ? false : true;
+    if (mRawInput != g_mRawInput[client])
+    {
+        g_mRawInputChangedCount[client]++;
+        g_mRawInput[client] = mRawInput;
 
-		if(g_mRawInputChangedCount[client] > 1)
-		{
-			PrintToAdmins("%N changed their m_rawinput ConVar to %d", client, mRawInput);
-			//AnticheatLog(client, "%L changed their m_rawinput ConVar to %d", mRawInput);
-		}
-	}
+        if (g_mRawInputChangedCount[client] > 1)
+        {
+            PrintToAdmins("%N changed their m_rawinput ConVar to %d", client, mRawInput);
+        }
+    }
 
-	g_mRawInputCheckedCount[client]++;
-	SimulateConVarQueryCompleted(client, CONVAR_RAWINPUT);
+    g_mRawInputCheckedCount[client]++;
+    g_bQueryPending[client][CONVAR_RAWINPUT] = false;
+
+    // If m_rawinput is 0, query additional cvars
+    if (!mRawInput)
+    {
+        if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL])
+        {
+            QueryClientConVar(client, "m_customaccel", OnCustomAccelRetrieved);
+            g_bQueryPending[client][CONVAR_CUSTOMACCEL] = true;
+        }
+        if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_MAX])
+        {
+            QueryClientConVar(client, "m_customaccel_max", OnCustomAccelMaxRetrieved);
+            g_bQueryPending[client][CONVAR_CUSTOMACCEL_MAX] = true;
+        }
+        if (!g_bQueryPending[client][CONVAR_FILTER])
+        {
+            QueryClientConVar(client, "m_filter", OnFilterRetrieved);
+            g_bQueryPending[client][CONVAR_FILTER] = true;
+        }
+        if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_SCALE])
+        {
+            QueryClientConVar(client, "m_customaccel_scale", OnCustomAccelScaleRetrieved);
+            g_bQueryPending[client][CONVAR_CUSTOMACCEL_SCALE] = true;
+        }
+        if (!g_bQueryPending[client][CONVAR_CUSTOMACCEL_EXPONENT])
+        {
+            QueryClientConVar(client, "m_customaccel_exponent", OnCustomAccelExRetrieved);
+            g_bQueryPending[client][CONVAR_CUSTOMACCEL_EXPONENT] = true;
+        }
+    }
 }
 
 public void OnSensitivityRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
@@ -1357,21 +1359,30 @@ public void OnZoomSensitivityRetrieved(QueryCookie cookie, int client, ConVarQue
 
 public void OnJoystickRetrieved(QueryCookie cookie, int client, ConVarQueryResult result, const char[] cvarName, const char[] cvarValue)
 {
-	bool joyStick = (0.0 <= StringToFloat(cvarValue) < 1.0)?false:true;
-	if(joyStick != g_JoyStick[client])
-	{
-		g_JoyStickChangedCount[client]++;
-		g_JoyStick[client] = joyStick;
+    bool joyStick = (0.0 <= StringToFloat(cvarValue) < 1.0) ? false : true;
+    if (joyStick != g_JoyStick[client])
+    {
+        g_JoyStickChangedCount[client]++;
+        g_JoyStick[client] = joyStick;
 
-		if(g_JoyStickChangedCount[client] > 1)
-		{
-			PrintToAdmins("%N changed their joystick ConVar to %d", client, joyStick);
-				//AnticheatLog("%L changed their joystick ConVar to %d", client, joyStick);
-		}
-	}
+        if (g_JoyStickChangedCount[client] > 1)
+        {
+            PrintToAdmins("%N changed their joystick ConVar to %d", client, joyStick);
+        }
+    }
 
-	g_JoyStickCheckedCount[client]++;
-	SimulateConVarQueryCompleted(client, CONVAR_JOYSTICK);
+    g_JoyStickCheckedCount[client]++;
+    g_bQueryPending[client][CONVAR_JOYSTICK] = false;
+
+    // If joystick is 1, query joy_yawsensitivity
+    if (joyStick)
+    {
+        if (!g_bQueryPending[client][CONVAR_YAWSENSITIVITY])
+        {
+            QueryClientConVar(client, "joy_yawsensitivity", OnYawSensitivityRetrieved);
+            g_bQueryPending[client][CONVAR_YAWSENSITIVITY] = true;
+        }
+    }
 }
 
 
@@ -1949,7 +1960,7 @@ public Action OnPlayerRunCmd(int client, int &buttons, int &impulse, float vel[3
 		Shavit_GetStyleStrings(style, sSpecialString, sSpecial, 128);
 		if(StrContains(sSpecial, "bash_bypass", false) != -1)
 		{
-			 	bCheck = false;
+			bCheck = false;
 		}
 
 		#endif
