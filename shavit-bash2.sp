@@ -421,20 +421,24 @@ public void OnLibraryRemoved(const char[] name)
 	#endif
 }
 
-stock void PrintToAdmins(const char[] msg, any...)
+stock void PrintToAdmins(const char[] msg, int client, any...)
 {
-	char buffer[300];
-	VFormat(buffer, sizeof(buffer), msg, 2);
+    if (client <= 0 || client > MaxClients || !IsClientInGame(client))
+        return;
 
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (CheckCommandAccess(i, "bash2_chat_log", ADMFLAG_RCON))
-		{
-			if(g_bAdminMode[i]) {
-				PrintToChat(i, buffer);
-			}
-		}
-	}
+    char buffer[300];
+    VFormat(buffer, sizeof(buffer), msg, 2);
+
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (CheckCommandAccess(i, "bash2_chat_log", ADMFLAG_RCON))
+        {
+            if (g_bAdminMode[i])
+            {
+                PrintToChat(i, buffer);
+            }
+        }
+    }
 }
 
 void Initialize()
