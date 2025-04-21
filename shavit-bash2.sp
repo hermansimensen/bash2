@@ -421,20 +421,24 @@ public void OnLibraryRemoved(const char[] name)
 	#endif
 }
 
-stock void PrintToAdmins(const char[] msg, any...)
+stock void PrintToAdmins(const char[] msg, int client, any...)
 {
-	char buffer[300];
-	VFormat(buffer, sizeof(buffer), msg, 2);
+    if (client <= 0 || client > MaxClients || !IsClientInGame(client))
+        return;
 
-	for (int i = 1; i <= MaxClients; i++)
-	{
-		if (CheckCommandAccess(i, "bash2_chat_log", ADMFLAG_RCON))
-		{
-			if(g_bAdminMode[i]) {
-				PrintToChat(i, buffer);
-			}
-		}
-	}
+    char buffer[300];
+    VFormat(buffer, sizeof(buffer), msg, 2);
+
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (CheckCommandAccess(i, "bash2_chat_log", ADMFLAG_RCON))
+        {
+            if (g_bAdminMode[i])
+            {
+                PrintToChat(i, buffer);
+            }
+        }
+    }
 }
 
 void Initialize()
@@ -2908,12 +2912,14 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 	}
 	else
 	{
-
-
 		if(GetEntityMoveType(client) == MOVETYPE_WALK &&
 			GetEntProp(client, Prop_Data, "m_nWaterLevel") < 2 &&
 			!(GetEntityFlags(client) & FL_ATCONTROLS))
 		{
+			// prevent false gain while standing still
+			if (FloatAbs(vel[0]) < 1.0 && FloatAbs(vel[1]) < 1.0)
+				return;
+
 			bool isYawing = false;
 			if(buttons & IN_LEFT) isYawing = !isYawing;
 			if(buttons & IN_RIGHT) isYawing = !isYawing;
@@ -2933,12 +2939,16 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 			g_strafeTick[client]++;
 			if(g_strafeTick[client] == 1000)
 			{
-				g_flRawGain[client] *= 998.0/999.0;
+				g_flRawGain[client] *= 998.0 / 999.0;
 				g_strafeTick[client]--;
 			}
 
 			float velocity[3];
 			GetEntPropVector(client, Prop_Data, "m_vecAbsVelocity", velocity);
+
+			// skip if player velocity is almost zero (standing still)
+			if (FloatAbs(velocity[0]) < 1.0 && FloatAbs(velocity[1]) < 1.0)
+				return;
 
 			float fore[3], side[3], wishvel[3], wishdir[3];
 			float wishspeed, wishspd, currentgain;
@@ -2954,7 +2964,11 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 				wishvel[i] = fore[i] * vel[0] + side[i] * vel[1];
 
 			wishspeed = NormalizeVector(wishvel, wishdir);
-			if(wishspeed > GetEntPropFloat(client, Prop_Send, "m_flMaxspeed")) wishspeed = GetEntPropFloat(client, Prop_Send, "m_flMaxspeed");
+			if(wishspeed == 0.0)
+				return;
+
+			float maxSpeed = GetEntPropFloat(client, Prop_Send, "m_flMaxspeed");
+			if(wishspeed > maxSpeed) wishspeed = maxSpeed;
 
 			if(wishspeed)
 			{
@@ -2962,18 +2976,26 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 
 				currentgain = GetVectorDotProduct(velocity, wishdir);
 				if(currentgain < 30.0)
+				{
 					gaincoeff = (wishspd - FloatAbs(currentgain)) / wishspd;
-				if(g_bTouchesWall[client] && gaincoeff > 0.5)
-				{
-					gaincoeff -= 1;
-					gaincoeff = FloatAbs(gaincoeff);
-				}
 
-				if(!g_bTouchesFuncRotating[client])
-				{
-					g_flRawGain[client] += gaincoeff;
-				}
+					if(g_bTouchesWall[client] && gaincoeff > 0.5)
+					{
+						gaincoeff -= 1;
+						gaincoeff = FloatAbs(gaincoeff);
+					}
 
+					if(!g_bTouchesFuncRotating[client])
+					{
+						g_flRawGain[client] += gaincoeff;
+
+						// Only log if gain > small threshold
+						if (gaincoeff > 0.01)
+						{
+							// PrintToServer("Client %d gaincoeff: %f", client, gaincoeff);
+						}
+					}
+				}
 			}
 		}
 		g_iTicksOnGround[client] = 0;
