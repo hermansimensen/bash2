@@ -2947,13 +2947,15 @@ void UpdateGains(int client, float vel[3], float angles[3], int buttons)
 
 			fore[2] = 0.0;
 			side[2] = 0.0;
-			NormalizeVector(fore, fore);
-			NormalizeVector(side, side);
+			if (fore[0] != 0.0 || fore[1] != 0.0)
+				NormalizeVector(fore, fore);
+			if (side[0] != 0.0 || side[1] != 0.0)
+				NormalizeVector(side, side);
 
 			for(int i = 0; i < 2; i++)
 				wishvel[i] = fore[i] * vel[0] + side[i] * vel[1];
-
-			wishspeed = NormalizeVector(wishvel, wishdir);
+			if (wishvel[0] != 0.0 || wishvel[1] != 0.0 || wishvel[2] != 0.0)
+				wishspeed = NormalizeVector(wishvel, wishdir);
 			if(wishspeed > GetEntPropFloat(client, Prop_Send, "m_flMaxspeed")) wishspeed = GetEntPropFloat(client, Prop_Send, "m_flMaxspeed");
 
 			if(wishspeed)
